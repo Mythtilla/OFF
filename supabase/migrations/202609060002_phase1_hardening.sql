@@ -1,0 +1,15 @@
+-- Phase 1 hardening: helpers run as owner but expose only boolean authorization decisions.
+alter table public.profiles add column if not exists display_name text check (char_length(display_name) between 1 and 80), add column if not exists avatar_url text;
+alter table public.messages add column if not exists thread_id uuid, add column if not exists client_event_id uuid not null default gen_random_uuid(), add constraint messages_target_check check ((room_id is null) <> (thread_id is null)), add constraint messages_body_length check (char_length(body) between 1 and 4000), add unique(sender_id, client_event_id);
+create index if not exists messages_room_created_idx on public.messages(room_id, created_at);
+create or replace function public.is_room_member(target_room uuid, target_user uuid default auth.uid()) returns boolean language sql stable security definer set search_path=public as $$ select exists(select 1 from public.room_members where room_id=target_room and user_id=target_user) $$;
+create or replace function public.is_room_moderator(target_room uuid, target_user uuid default auth.uid()) returns boolean language sql stable security definer set search_path=public as $$ select exists(select 1 from public.room_members where room_id=target_room and user_id=target_user and role in ('owner','moderator')) $$;
+revoke all on function public.is_room_member(uuid,uuid) from public; revoke all on function public.is_room_moderator(uuid,uuid) from public; grant execute on function public.is_room_member(uuid,uuid), public.is_room_moderator(uuid,uuid) to authenticated;
+drop policy if exists "visible rooms only" on public.rooms; drop policy if exists "members can read membership" on public.room_members; drop policy if exists "visible messages only" on public.messages; drop policy if exists "members send as self" on public.messages;
+create policy "discover public or joined rooms" on public.rooms for select to authenticated using (not is_private or public.is_room_member(id));
+create policy "read joined room members" on public.room_members for select to authenticated using (public.is_room_member(room_id));
+create policy "join public custom rooms" on public.room_members for insert to authenticated with check (user_id=auth.uid() and exists(select 1 from public.rooms where id=room_id and kind='custom' and not is_private));
+create policy "owners moderate membership" on public.room_members for all to authenticated using (public.is_room_moderator(room_id)) with check (public.is_room_moderator(room_id));
+create policy "read authorized room messages" on public.messages for select to authenticated using (room_id is not null and exists(select 1 from public.rooms where id=room_id and (kind='world' or public.is_room_member(id))));
+create policy "send to authorized room" on public.messages for insert to authenticated with check (sender_id=auth.uid() and room_id is not null and exists(select 1 from public.rooms where id=room_id and (kind='world' or public.is_room_member(id))));
+-- Existing author-only update/delete policies remain in force; deleted rows stay hidden by client queries.
