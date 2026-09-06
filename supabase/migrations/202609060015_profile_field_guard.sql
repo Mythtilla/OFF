@@ -1,0 +1,3 @@
+create or replace function public.guard_profile_trusted_fields() returns trigger language plpgsql security definer set search_path=public as $$ begin if new.country_code is distinct from old.country_code then raise exception 'country_code is managed server-side'; end if; if new.country_source is distinct from old.country_source then raise exception 'country_source is managed server-side'; end if; return new; end $$;
+drop trigger if exists guard_profile_trusted_fields_trigger on public.profiles;
+create trigger guard_profile_trusted_fields_trigger before update on public.profiles for each row execute procedure public.guard_profile_trusted_fields();

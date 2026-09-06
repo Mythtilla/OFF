@@ -3,8 +3,26 @@ import type { Session } from "@supabase/supabase-js";
 import { createRoot } from "react-dom/client";
 import { AuthForm } from "./components/auth/AuthForm";
 import { ChatShell } from "./components/chat/ChatShell";
+import { OnboardingFlow } from "./components/onboarding/OnboardingFlow";
 import { isSupabaseConfigured, supabase } from "./integrations/supabase/client";
 import "./styles.css";
+
+type ProfileRow = {
+  username: string;
+  recovery_acknowledged_at: string | null;
+  profile_completed_at: string | null;
+  country_handled_at: string | null;
+  interests_handled_at: string | null;
+  onboarding_completed: boolean;
+};
+
+type AppState =
+  | { phase: "initializing" }
+  | { phase: "error"; message: string }
+  | { phase: "signed-out"; screen: "landing" | "auth" }
+  | { phase: "onboarding"; session: Session; profile: ProfileRow }
+  | { phase: "chat"; session: Session };
+
 function Landing({ onAuth }: { onAuth: () => void }) {
   return (
     <main className="landing">
@@ -51,18 +69,51 @@ function Landing({ onAuth }: { onAuth: () => void }) {
     </main>
   );
 }
+
 function Root() {
-  const [screen, setScreen] = useState<"landing" | "auth">("landing"),
-    [session, setSession] = useState<Session | null>(null);
+  const [state, setState] = useState<AppState>({ phase: "initializing" });
+
+  async function loadProfile(session: Session) {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "username,recovery_acknowledged_at,profile_completed_at,country_handled_at,interests_handled_at,onboarding_completed",
+      )
+      .eq("id", session.user.id)
+      .single();
+    if (error || !data) {
+      setState({ phase: "error", message: "Couldn't load your profile." });
+      return;
+    }
+    if (data.onboarding_completed) {
+      setState({ phase: "chat", session });
+    } else {
+      setState({
+        phase: "onboarding",
+        session,
+        profile: data as ProfileRow,
+      });
+    }
+  }
+
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, next) =>
-      setSession(next),
-    );
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data.session) loadProfile(data.session);
+        else setState({ phase: "signed-out", screen: "landing" });
+      })
+      .catch(() => setState({ phase: "signed-out", screen: "landing" }));
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) loadProfile(session);
+      else setState({ phase: "signed-out", screen: "landing" });
+    });
     return () => data.subscription.unsubscribe();
   }, []);
-  if (!isSupabaseConfigured)
+
+  if (!isSupabaseConfigured) {
     return (
       <main className="setup">
         <b>OFF</b>
@@ -74,12 +125,45 @@ function Root() {
         </p>
       </main>
     );
-  return session ? (
-    <ChatShell session={session} />
-  ) : screen === "landing" ? (
-    <Landing onAuth={() => setScreen("auth")} />
-  ) : (
-    <AuthForm onClose={() => setScreen("landing")} />
-  );
+  }
+
+  switch (state.phase) {
+    case "initializing":
+      return (
+        <main className="setup">
+          <b>OFF</b>
+          <h1>Loading…</h1>
+        </main>
+      );
+    case "error":
+      return (
+        <main className="setup">
+          <b>OFF</b>
+          <h1>Something went wrong.</h1>
+          <p>{state.message}</p>
+        </main>
+      );
+    case "signed-out":
+      return state.screen === "landing" ? (
+        <Landing
+          onAuth={() => setState({ phase: "signed-out", screen: "auth" })}
+        />
+      ) : (
+        <AuthForm
+          onClose={() => setState({ phase: "signed-out", screen: "landing" })}
+        />
+      );
+    case "onboarding":
+      return (
+        <OnboardingFlow
+          session={state.session}
+          profile={state.profile}
+          onComplete={() => loadProfile(state.session)}
+        />
+      );
+    case "chat":
+      return <ChatShell session={state.session} />;
+  }
 }
+
 createRoot(document.getElementById("root")!).render(<Root />);

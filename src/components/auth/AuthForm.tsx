@@ -2,27 +2,45 @@ import { useState } from "react";
 import { signIn, signUp } from "../../services/auth/service";
 import { validateUsername } from "../../services/auth/username";
 import { recoveryNotice } from "../../services/auth/recovery";
+
+function safeError(msg: string): string {
+  if (msg.includes("Invalid login credentials"))
+    return "Username or password is incorrect.";
+  if (msg.includes("User already registered"))
+    return "This username is already taken.";
+  if (msg.includes("Password")) return "Password doesn't meet requirements.";
+  return "Something went wrong. Please try again.";
+}
+
 export function AuthForm({ onClose }: { onClose: () => void }) {
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in"),
     [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
-    [status, setStatus] = useState("");
+    [status, setStatus] = useState(""),
+    [submitting, setSubmitting] = useState(false);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const invalid = validateUsername(username);
     if (invalid) return setStatus(invalid);
+    setSubmitting(true);
     setStatus("Working…");
-    const result =
-      mode === "sign_in"
-        ? await signIn(username, password)
-        : await signUp(username, password);
-    setStatus(
-      result.error?.message ??
-        (mode === "sign_up"
-          ? "Account created. Check confirmation settings, then sign in."
-          : "Signed in."),
-    );
+    try {
+      const result =
+        mode === "sign_in"
+          ? await signIn(username, password)
+          : await signUp(username, password);
+      if (result.error) {
+        setStatus(safeError(result.error.message));
+      } else if (mode === "sign_up") {
+        setStatus("Account created.");
+      }
+    } catch {
+      setStatus("Network error. Please try again.");
+    }
+    setSubmitting(false);
   }
+
   return (
     <main className="auth">
       <button className="back" onClick={onClose}>
@@ -62,13 +80,21 @@ export function AuthForm({ onClose }: { onClose: () => void }) {
             required
           />
         </label>
-        <button className="primary">
-          {mode === "sign_in" ? "Sign in" : "Create account"} <span>→</span>
+        <button className="primary" disabled={submitting}>
+          {submitting
+            ? "Working…"
+            : mode === "sign_in"
+              ? "Sign in"
+              : "Create account"}{" "}
+          <span>→</span>
         </button>
         <button
           type="button"
           className="link"
-          onClick={() => setMode(mode === "sign_in" ? "sign_up" : "sign_in")}
+          onClick={() => {
+            setMode(mode === "sign_in" ? "sign_up" : "sign_in");
+            setStatus("");
+          }}
         >
           {mode === "sign_in"
             ? "Need an account? Register"

@@ -9,9 +9,11 @@ export function recoveryDownload(username: string, words: string[]) {
 export function RecoveryCeremony({
   username,
   onContinue,
+  error,
 }: {
   username: string;
   onContinue: () => void;
+  error?: string;
 }) {
   const phrase = useMemo(() => generateRecoveryPhrase(), []),
     [confirmed, setConfirmed] = useState(false);
@@ -57,6 +59,11 @@ export function RecoveryCeremony({
             Print
           </button>
         </div>
+        {error && (
+          <p className="status" role="alert">
+            {error}
+          </p>
+        )}
         <label>
           <input
             type="checkbox"
