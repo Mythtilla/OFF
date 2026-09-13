@@ -14,6 +14,17 @@ export type PendingMessage = Message & {
   client_event_id: string;
   pending?: boolean;
 };
+export type MessageGroup = { sender_id: string; messages: PendingMessage[] };
+export function groupMessages(messages: PendingMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = [];
+  for (const message of messages) {
+    const last = groups[groups.length - 1];
+    if (last && last.sender_id === message.sender_id)
+      last.messages.push(message);
+    else groups.push({ sender_id: message.sender_id, messages: [message] });
+  }
+  return groups;
+}
 /** Replaces a local optimistic event with its persisted counterpart exactly once. */
 export function reconcileMessage(
   messages: PendingMessage[],

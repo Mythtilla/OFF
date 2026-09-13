@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../../integrations/supabase/client";
 import { nextOnboardingStep } from "../../services/onboarding/state";
+import { onboardingProgress } from "../../services/onboarding/progress";
 import { RecoveryCeremony } from "./RecoveryCeremony";
 import { ProfileStep } from "./ProfileStep";
 import { CountryStep } from "./CountryStep";
@@ -34,6 +35,7 @@ export function OnboardingFlow({
     }),
   );
   const [error, setError] = useState("");
+  const progress = onboardingProgress(profile);
 
   async function advance() {
     const { data } = await supabase!
@@ -65,7 +67,33 @@ export function OnboardingFlow({
   }
 
   return (
-    <>
+    <div className="onboarding">
+      <div
+        className="onboard-progress"
+        role="status"
+        aria-label={`Onboarding progress: ${progress.percent}%`}
+      >
+        <div className="onboard-bar" aria-hidden="true">
+          <span style={{ width: `${progress.percent}%` }} />
+        </div>
+        <ol>
+          {progress.steps.map((step) => (
+            <li
+              key={step.id}
+              className={
+                step.done
+                  ? "done"
+                  : step.id === progress.current
+                    ? "current"
+                    : ""
+              }
+            >
+              <i aria-hidden="true">{step.done ? "✓" : ""}</i>
+              {step.label}
+            </li>
+          ))}
+        </ol>
+      </div>
       {step === "recovery" && (
         <RecoveryCeremony
           username={profile.username}
@@ -137,6 +165,6 @@ export function OnboardingFlow({
           }}
         />
       )}
-    </>
+    </div>
   );
 }

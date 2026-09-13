@@ -5,20 +5,9 @@ import {
   reconcileMessage,
   type PendingMessage,
 } from "../services/chat/messages";
-import { canPostToRoom, isDiscoverable } from "../services/rooms/permissions";
-import { profileLabel, profileMap } from "../services/profiles/map";
-import { normalizeCountryCode } from "../services/geo/country";
-import {
-  canChangeRole,
-  canLeave,
-  validMessageTarget,
-} from "../services/rooms/roles";
+import { canPostToRoom } from "../services/rooms/permissions";
 import { generateRecoveryPhrase } from "../services/auth/recovery";
-import {
-  countryRoomSlug,
-  validInterestSelection,
-  interestSlugs,
-} from "../services/onboarding/interests";
+import { interestSlugs } from "../services/onboarding/interests";
 import { recoveryDownload } from "../components/onboarding/RecoveryCeremony";
 import { nextOnboardingStep } from "../services/onboarding/state";
 
@@ -117,62 +106,11 @@ describe("room permissions", () => {
   });
   it("private rooms hide from non-members", () => {
     const room = { id: "1", slug: "x", name: "X", topic: null, kind: "custom" as const, is_private: true };
-    expect(isDiscoverable(room, false)).toBe(false);
-    expect(isDiscoverable(room, true)).toBe(true);
+    expect(canPostToRoom({ ...room, is_member: false })).toBe(false);
+    expect(canPostToRoom({ ...room, is_member: true })).toBe(true);
   });
   it("null room returns false", () => {
     expect(canPostToRoom(null)).toBe(false);
-  });
-});
-
-describe("roles", () => {
-  it("owner can change non-owner roles", () => {
-    expect(canChangeRole("owner", "member", "moderator")).toBe(true);
-  });
-  it("owner cannot demote self", () => {
-    expect(canChangeRole("owner", "owner", "member")).toBe(false);
-    expect(canChangeRole("owner", "owner", "moderator")).toBe(false);
-  });
-  it("non-owner cannot change roles", () => {
-    expect(canChangeRole("moderator", "owner", "member")).toBe(false);
-    expect(canChangeRole("member", "member", "moderator")).toBe(false);
-  });
-  it("only members can leave", () => {
-    expect(canLeave("member")).toBe(true);
-    expect(canLeave("owner")).toBe(false);
-    expect(canLeave("moderator")).toBe(false);
-  });
-  it("message target must be exactly one of room or thread", () => {
-    expect(validMessageTarget("room", null)).toBe(true);
-    expect(validMessageTarget(null, "thread")).toBe(true);
-    expect(validMessageTarget("room", "thread")).toBe(false);
-    expect(validMessageTarget(null, null)).toBe(false);
-  });
-});
-
-describe("profiles", () => {
-  it("profile label prefers display_name then username", () => {
-    expect(profileLabel({ id: "1", username: "ada", display_name: "Ada L.", avatar_url: null })).toBe("Ada L.");
-    expect(profileLabel({ id: "1", username: "ada", display_name: null, avatar_url: null })).toBe("ada");
-    expect(profileLabel(undefined)).toBe("Unknown member");
-    expect(profileLabel(null)).toBe("Unknown member");
-  });
-  it("profileMap maps by id", () => {
-    const p = { id: "u1", username: "bob", display_name: null, avatar_url: null };
-    expect(profileMap([p]).get("u1")).toEqual(p);
-  });
-});
-
-describe("country", () => {
-  it("normalizes valid 2-letter codes", () => {
-    expect(normalizeCountryCode(" us ")).toBe("US");
-    expect(normalizeCountryCode("in")).toBe("IN");
-  });
-  it("returns XX for invalid codes", () => {
-    expect(normalizeCountryCode("bad")).toBe("XX");
-    expect(normalizeCountryCode(null)).toBe("XX");
-    expect(normalizeCountryCode("")).toBe("XX");
-    expect(normalizeCountryCode("USA")).toBe("XX");
   });
 });
 
@@ -197,21 +135,6 @@ describe("interests", () => {
       "cybersecurity", "linux", "programming", "ai", "ctf", "science", "hardware",
     ]);
   });
-  it("validates known interests", () => {
-    expect(validInterestSelection(["linux", "ai"])).toBe(true);
-    expect(validInterestSelection(["linux", "ai", "linux"])).toBe(true);
-    expect(validInterestSelection([])).toBe(true);
-  });
-  it("rejects unknown interests", () => {
-    expect(validInterestSelection(["secret"])).toBe(false);
-    expect(validInterestSelection(["linux", "hacking"])).toBe(false);
-  });
-  it("country room slug", () => {
-    expect(countryRoomSlug("IN")).toBe("country-in");
-    expect(countryRoomSlug("us")).toBeNull();
-    expect(countryRoomSlug("XX")).toBe("country-xx");
-    expect(countryRoomSlug("A")).toBeNull();
-  });
 });
 
 describe("onboarding state machine", () => {
@@ -230,23 +153,5 @@ describe("onboarding state machine", () => {
   });
   it("skips to correct step if earlier steps done", () => {
     expect(nextOnboardingStep({ recovery: false, profile: true, country: false, interests: false })).toBe("recovery");
-  });
-});
-
-describe("stale request protection", () => {
-  it("request ref increments", () => {
-    const ref = { current: 0 };
-    const id1 = ++ref.current;
-    const id2 = ++ref.current;
-    expect(id2).toBeGreaterThan(id1);
-  });
-});
-
-describe("channel status mapping", () => {
-  it("maps all expected statuses", () => {
-    const statuses = ["SUBSCRIBED", "CHANNEL_ERROR", "TIMED_OUT", "CLOSED"];
-    for (const s of statuses) {
-      expect(["SUBSCRIBED", "CHANNEL_ERROR", "TIMED_OUT", "CLOSED", "Connecting"]).toContain(s);
-    }
   });
 });

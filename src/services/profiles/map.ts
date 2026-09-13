@@ -1,7 +1,9 @@
 import type { Profile } from "../chat/types";
-export function profileMap(profiles: Profile[]) {
-  return new Map(profiles.map((profile) => [profile.id, profile]));
-}
-export function profileLabel(profile: Profile | undefined | null) {
+export function senderName(
+  senderId: string,
+  senders: Readonly<Record<string, Profile>>,
+  embedded?: Profile | null,
+) {
+  const profile = senders[senderId] || embedded || null;
   return profile?.display_name || profile?.username || "Unknown member";
 }

@@ -33,7 +33,7 @@ export function InterestsStep({
         <b>OFF</b>
         <p className="eyebrow">STEP 4 OF 4</p>
         <h1>Interests.</h1>
-        <p style={{ color: "#bbb8b1", lineHeight: 1.5 }}>
+        <p className="note">
           Pick at least one community to join.
         </p>
         <div className="interest-grid">

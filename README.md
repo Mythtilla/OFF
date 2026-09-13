@@ -2,44 +2,105 @@
 
 Private conversations. Open communities.
 
-## Architecture and security checklist
+A responsive single-page community platform: pseudonymous discussion rooms, password authentication, and realtime messaging backed by Supabase (database, Auth, Postgres RLS, and Realtime).
 
-This repository was supplied with only this README and an empty Git history; there were no routes, dependencies, Supabase integration, migrations, recovery implementation, or RLS policies to audit. The initial implementation therefore establishes a small, deployable Supabase-backed MVP baseline instead of assuming undocumented Lovable state is present.
+## What it is
 
-- [x] Client uses only `VITE_SUPABASE_URL` and a publishable/anon key; it has no service-role credential path.
-- [x] Auth is password-based through Supabase Auth; the UI derives a non-deliverable internal auth email from the requested pseudonym. Production should instead use a server-side username-to-auth lookup to avoid exposing this convention.
-- [x] RLS restricts private rooms and their messages to members, verifies message ownership for writes, and enables WebSocket realtime for messages.
-- [x] Public rooms are intentionally writable by authenticated users; moderation, blocks/reports, rate limits, DMs, receipts, country room assignment, and invitations remain required follow-up work.
-- [x] No analytics, tracking pixels, IP reads, or service-role secrets are included.
-- [x] The recovery phrase UX is deliberately **not implemented** because no existing verifier was supplied and a three-position fast-hash design would not be safe to present as recovery. `src/services/auth/recovery.ts` preserves only guarded copy for future work.
-- [x] Media uploads are intentionally not enabled until a server-side re-encode/metadata-cleaning endpoint exists and has tests.
+- **Landing + auth**: Sign in or create an account with a pseudonym and a password only. A username is chosen and checked for availability against the database before it is claimed.
+- **Rooms**: A seeded public **World** room plus interest rooms. Users can join public rooms, create custom private rooms, and open a DM thread.
+- **Chat**: Optimistic message sending with a client event id, realtime delivery, per-sender grouping, and an honest connection (`○ Connecting…`) indicator — no fabricated `LIVE` state.
+- **Onboarding**: A four-step flow — recovery notice, profile, country, interests — with progress tracked in auth metadata and, once trusted, reflected in the profiles table.
+
+## Architecture and security model
+
+- The client uses only `VITE_SUPABASE_URL` and a publishable/anon key. There is **no service-role credential path** in the client.
+- RLS is **authoritative and never disabled or broadened**: private rooms/messages are restricted to members, message writes verify ownership, and roles are constrained by database triggers (`owner_invariant`, `member_can_join`, role guards).
+- Writes that must be safe (room creation with advisory-locked slug serialization, username status, ownership) are exposed as `security definer` RPCs with `search_path = public` that reject unauthenticated callers.
+- No analytics, tracking pixels, IP reads, session replay, fingerprinting, or external scripts.
+- **Recovery is intentionally a documented placeholder** (`recoveryNotice`), not a cryptographic key backup. It is versioned as an honest ceremony rather than a fake mechanism.
+
+## Product decisions / current limitations (V1)
+
+- **Country detection is a documented stub**: the user picks from pre-populated interest slugs; there is no IP-based geo lookup and no tracking.
+- **Google OAuth was removed in the privacy-first pivot**: no Google/`signInWithOAuth` surface remains in code, tests, or config. Generic OAuth infrastructure in `supabase/config.toml` comments is left untouched but unused.
+- **Media uploads are intentionally off** until a server-side re-encode / metadata-cleaning endpoint exists and is tested.
+- **Rate limits, blocks/reports, moderation, DMs-to-anyone broadening, invitations, and receipts** remain future work.
+- **Recovery phrase ceremony is a placeholder**, not a real key backup.
 
 ## Run locally
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env.local   # fill in your Supabase URL + publishable key
 npm install
 npm run dev
 ```
 
-Apply `supabase/migrations/202609060001_off_mvp.sql` to a new Supabase project before use. Enable email confirmation according to the deployment policy; the UI reports Supabase errors without enumerating an account during registration.
+Env vars (`.env.local`):
 
-## Current MVP surface
+| Variable | Meaning |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Your Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | The anon / publishable key (never a service-role key) |
 
-Landing, password authentication, pseudonymous profile trigger, seeded public rooms, optimistic message sending, and Supabase Realtime receiving are implemented. The responsive conversation shell uses live database queries—not fixture chat content.
+## Apply migrations
 
-## Supabase RLS integration verification
+Create a Supabase project, then apply the migration files **in order** (they reset relevant policies and build top of each other):
 
-Before release, apply all migrations to an isolated Supabase project and run these role-based checks with two authenticated test users: a non-member cannot select or insert private-room messages; an interest/custom-room visitor can discover but cannot post until joining; a member insert cannot set `role` to moderator/owner; a member cannot update membership roles; a sender cannot update/delete another sender's message; and a DM participant cannot access a thread they do not participate in. These are database integration checks and are not represented as browser unit tests.
+```
+supabase/migrations/202609060001_off_mvp.sql
+… (every 20260906000N_*.sql in order)
+supabase/migrations/202609070001_username_status.sql
+```
 
-## Phase 2.5 database integration plan
+The full set (16 files) is required; later migrations enforce message-target integrity, ownership invariants, onboarding state transitions, username/identity integrity, and the `username_status` RPC used by the signup checker.
 
-Run with two Supabase Auth users (A and B) after applying migrations: A/B can read and post World; A discovers but cannot read/post an interest room before joining, then can after joining; B cannot discover/read/post A’s private custom room; an owner can promote/remove members, a moderator cannot alter/remove the owner or become owner, and a member cannot modify membership; unrelated users cannot select a DM thread/message; participants can; authors can edit/soft-delete only their own messages. The migration resets all listed table policies before defining this single policy set.
+### Enable email confirmation
 
-## Final foundation audit notes
+Set email confirmation per your deployment policy. The UI reports Supabase errors without enumerating an account during registration.
 
-`202609060006_integrity_constraints.sql` enforces a single valid room-or-DM message target through the prior target check, adds same-conversation reply validation, and makes room slug collision handling transactional. Apply all migrations in order. The security-definer functions use `search_path = public`, reject unauthenticated callers where they mutate state, and do not accept caller-selected ownership.
+## Scripts
 
-## Ownership invariant
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Local dev server (Vite) |
+| `npm run typecheck` | TypeScript typecheck (`tsc -b`) |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest suite (static + behavior tests, no browser) |
+| `npm run smoke` | Boots the production build (`vite preview`) and runs a headless-Chrome render + asset smoke against it (skips if no Chrome present) |
+| `npm run build` | Typecheck + production build to `dist/` |
 
-`202609060007_owner_invariant.sql` adds a database trigger that rejects deletion or demotion of any owner row. Ownership transfer is deliberately unavailable until a dedicated transaction-safe RPC is introduced. The authoritative `create_room` contract requires an authenticated caller, validates the name/topic, serializes same-base-slug creation with a transaction advisory lock, and atomically creates exactly one initial owner membership.
+## Testing, honestly labeled
+
+All tests run in Node/Vitest. They are **static and behavior tests, not browser/E2E tests** — there is no browser in CI. Coverage is grouped as:
+
+- **UNIT/STATIC** — pure logic: password strength, username canonicalization/validation, sender-name precedence, message grouping/reconcile, onboarding progress, permissions matrix, layout helpers.
+- **STATIC (config/source)** — architecture invariants: no service-role keys, RLS policies present, CSP/security headers, `index.html` metadata, no external scripts, no tracking.
+- **INTEGRATION (RPC failure paths)** — availability lookup degrading to `idle` on failure, message reconcile idempotency.
+- **MANUAL/UNVERIFIED** — anything that requires a running browser, the real Supabase network, or the external Dashboard.
+
+The following are **not** represented as passing automated tests; they are manual QA procedures to run against a live deployment:
+
+1. **Two-account RLS check**: with users A and B, verify B cannot read/post A's private custom room, and that role/ownership guards hold (owner cannot be demoted; member cannot become owner).
+2. **Mobile widths**: verify the responsive shell, sheets, bottom nav, and 44px touch targets across a phone width.
+3. **Realtime**: send from a second tab/window and confirm delivery + connection indicator transitions.
+4. **Visual/pixel**: OG image and apple-touch-icon appearance on real social/CDN surfaces.
+
+## Deploy
+
+`npm run build` produces static assets in `dist/`. `wrangler.jsonc` mounts `./dist` as Workers Static Assets with a SPA single-page fallback, which honors `public/_headers` (copied into `dist`). Headers shipped include a strict CSP (`connect-src` limited to self + `https://*.supabase.co` and `wss://*.supabase.co` for realtime), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, HSTS, and a `Permissions-Policy` that denies unused browser APIs.
+
+Canonical production URL: `https://open-freedom-forum.photo-studio.workers.dev/`
+
+## Manual database integration checklist (pre-release)
+
+After applying all migrations to a fresh Supabase project with two authenticated users, run the role-based checks:
+
+- A non-member cannot select or insert private-room messages.
+- An interest/custom-room visitor can discover but cannot post until joining.
+- A member insert cannot set `role` to moderator/owner.
+- A member cannot update membership roles.
+- A sender cannot update/delete another sender's message.
+- A DM participant cannot access a thread they do not participate in.
+- Owners cannot be demoted or deleted (`owner_invariant` trigger).
+
+These are database integration checks and are **not** part of the automated test suite.

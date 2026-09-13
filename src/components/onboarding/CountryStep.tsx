@@ -21,7 +21,7 @@ export function CountryStep({
         <b>OFF</b>
         <p className="eyebrow">STEP 3 OF 4</p>
         <h1>Your region.</h1>
-        <p style={{ color: "#bbb8b1", lineHeight: 1.5 }}>
+        <p className="note">
           Country detection is not available in this version. You can continue
           without setting a region. This step will be recorded as handled.
         </p>

@@ -3,7 +3,7 @@ export function canonicalizeUsername(username: string) { return username.trim().
 export function validateUsername(username: string) {
   return usernamePattern.test(username)
     ? null
-    : "Use 3–32 letters, numbers, or underscores.";
+    : "Use 3–32 lowercase letters, numbers, or underscores.";
 }
 /** Temporary Supabase Auth transport mapping. Keep internal and replaceable. */
 export function usernameToAuthEmail(username: string) {
