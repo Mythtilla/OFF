@@ -6,6 +6,7 @@ export function validateUsername(username: string) {
     : "Use 3–32 lowercase letters, numbers, or underscores.";
 }
 /** Temporary Supabase Auth transport mapping. Keep internal and replaceable. */
+export const AUTH_EMAIL_DOMAIN = "off.app";
 export function usernameToAuthEmail(username: string) {
-  return `${canonicalizeUsername(username)}@off.invalid`;
+  return `${canonicalizeUsername(username)}@${AUTH_EMAIL_DOMAIN}`;
 }

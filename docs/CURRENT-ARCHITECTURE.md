@@ -26,7 +26,7 @@ Status: verified against source on 2026-09-12. This map supersedes prior informa
 | Service | Responsibility |
 |---|---|
 | `auth/service.ts` | `signIn`, `signUp` (uses `usernameToAuthEmail`) |
-| `auth/username.ts` | canonicalize/validate username, derive deterministic auth email (`<username>@off.invalid`) |
+| `auth/username.ts` | canonicalize/validate username, derive deterministic auth email (`<username>@off.app`) |
 | `auth/availability.ts` | `checkUsername` → idle/checking/available/unavailable/invalid via RPC `username_status` |
 | `auth/strength.ts`, `auth/errors.ts`, `auth/recovery.ts` | password strength, safe error mapping, recovery notice copy |
 | `chat/types.ts`, `chat/messages.ts`, `chat/senders.ts`, `chat/status.ts` | message shape, reconcile/group, sender name resolution, channel status labels |
@@ -68,13 +68,13 @@ Status: verified against source on 2026-09-12. This map supersedes prior informa
 
 ## Testing
 
-- 9 Vitest files / 199 tests (unit + static config/source audits), `src/test/`.
+- 9 Vitest files / 198 tests (unit + static config/source audits), `src/test/`.
 - `scripts/smoke.mjs` (`npm run smoke`): boots production build via `vite preview` and renders it in headless Chrome; asserts assets, metadata, hydration, absence of uncaught errors.
 
 ## Deployment
 
 - `npm run build` → `dist/` → Workers Static Assets (`assets.directory: ./dist`), SPA `not_found_handling`.
-- Canonical public URL: `https://open-freedom-forum.photo-studio.workers.dev/`.
+- Canonical public URL: `https://off.testingver.workers.dev/`.
 
 ## Known weak spots for the V1 privacy pivot
 

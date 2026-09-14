@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateUsername, canonicalizeUsername, usernameToAuthEmail, usernamePattern } from "../services/auth/username";
+import { validateUsername, canonicalizeUsername, usernameToAuthEmail, usernamePattern, AUTH_EMAIL_DOMAIN } from "../services/auth/username";
 import {
   validateMessageBody,
   reconcileMessage,
@@ -49,8 +49,8 @@ describe("username", () => {
     expect(canonicalizeUsername("already")).toBe("already");
   });
   it("maps username to synthetic auth email", () => {
-    expect(usernameToAuthEmail("ada")).toBe("ada@off.invalid");
-    expect(usernameToAuthEmail("  Bob  ")).toBe("bob@off.invalid");
+    expect(usernameToAuthEmail("ada")).toBe(`ada@${AUTH_EMAIL_DOMAIN}`);
+    expect(usernameToAuthEmail("  Bob  ")).toBe(`bob@${AUTH_EMAIL_DOMAIN}`);
   });
   it("pattern only allows lowercase, digits, underscores", () => {
     expect(usernamePattern.test("abc_123")).toBe(true);

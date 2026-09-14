@@ -2,14 +2,14 @@
 
 Status: **V1 environment separation completed 2026-09-13.** The V1 project is the only Supabase project the app and the CLI touch. The original single hosted project is archived and must not be modified.
 
-## Current environment state (verified 2026-09-13)
+## Current environment state (verified 2026-09-14)
 
 | Source | Value | Verdict |
 |---|---|---|
-| `wrangler.jsonc` / deploy URL | `https://open-freedom-forum.photo-studio.workers.dev/` | public site served by V1 |
+| `wrangler.jsonc` / deploy URL | `https://off.testingver.workers.dev/` (worker `off`, account `9adb20cd…`) | public site served by V1 |
 | `.env.local` (`VITE_SUPABASE_URL`) | `https://afkxawjhaoobdnegaekp.supabase.co` | **V1 project (active)** |
 | `.env.local` (key) | publishable/anon key only; **no service-role key anywhere in repo**; the project's secret key was used transiently for admin test-user provisioning and was never persisted, printed, or committed |
-| Deployed Worker bundle (`/assets/index-DveO6dhR.js`, fetched live) | embeds `https://afkxawjhaoobdnegaekp.supabase.co`; zero references to the old ref | deployed site uses ONLY the V1 project |
+| Deployed Worker bundle (`/assets/index-uMVUTzio.js`, fetched live) | embeds `https://afkxawjhaoobdnegaekp.supabase.co`; zero references to the old ref | deployed site uses ONLY the V1 project |
 | `supabase/.temp/project-ref` + `linked-project.json` | ref `afkxawjhaoobdnegaekp`, org `kmdkpwviohwixylvgwvk` | Supabase CLI is LINKED to V1 |
 | Old hosted project | ref `yiwygvsqrcouqsjjtgiq`, org `mcuzxgotwnlmcarwsqgt` | **ARCHIVED — do not link, push, or reset** |
 | `supabase/config.toml` | `project_id = "OFF"`, local port 54321 | local Docker stack only |
@@ -80,6 +80,6 @@ After the operator confirms + runs the reset:
 
 - [x] Create the new `off-v1` Supabase project and migrate/seed it (Path B) — **DONE 2026-09-13** (`afkxawjhaoobdnegaekp`).
 - [x] Re-link the CLI to the new project (`.temp` now targets `afkxawjhaoobdnegaekp`).
-- [ ] **V1 known limitation:** hosted Supabase Auth rejects public self-signup for the app's deterministic `username@off.invalid` transport (GoTrue email validation + email confirmation). Sign-in works for provisioned (admin-created, email-confirmed) users. Decide the V1 auth transport (real email domain + confirmation, or a local/stateless auth scheme) before opening the site to anonymous registration.
+- [x] Auth transport and self-signup **RESOLVED 2026-09-14**: pseudo-email is `@off.app` (`AUTH_EMAIL_DOMAIN` in `src/services/auth/username.ts`); hosted email confirmation is OFF; anonymous self-signup verified live (immediate session, profile auto-created via trigger, `username_status` gates claims). Keep `AUTH_EMAIL_DOMAIN` stable.
 - [ ] If the owner ever chooses an in-place reset on V1: explicit owner confirmation, retention check, then Path C.
 - [ ] Old project `yiwygvsqrcouqsjjtgiq`: retained as archive; delete only with explicit confirmation.

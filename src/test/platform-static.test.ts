@@ -79,7 +79,7 @@ describe("content security policy (runtime-accurate)", () => {
 describe("site metadata", () => {
   it("has the canonical production URL", () => {
     expect(indexHtml).toContain(
-      '<link rel="canonical" href="https://open-freedom-forum.photo-studio.workers.dev/" />',
+      '<link rel="canonical" href="https://off.testingver.workers.dev/" />',
     );
   });
   it("declares Open Graph identity", () => {
@@ -91,7 +91,7 @@ describe("site metadata", () => {
   });
   it("references an absolute 1200x630 og image that exists on disk", () => {
     expect(indexHtml).toContain(
-      '<meta property="og:image" content="https://open-freedom-forum.photo-studio.workers.dev/og-image.png" />',
+      '<meta property="og:image" content="https://off.testingver.workers.dev/og-image.png" />',
     );
     expect(pngDimensions("og-image.png")).toEqual([1200, 630]);
   });

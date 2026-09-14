@@ -54,9 +54,16 @@ supabase/migrations/202609070001_username_status.sql
 
 The full set (16 files) is required; later migrations enforce message-target integrity, ownership invariants, onboarding state transitions, username/identity integrity, and the `username_status` RPC used by the signup checker.
 
-### Enable email confirmation
+### Email confirmation (V1)
 
-Set email confirmation per your deployment policy. The UI reports Supabase errors without enumerating an account during registration.
+V1 ships with hosted email confirmation **OFF**. The auth transport is a
+derived pseudo-email (`<username>@off.app`), which is not deliverable. With
+confirmation off, anonymous self-signup returns an immediate session and the
+`handle_new_user` trigger auto-creates the profile. The UI reports Supabase
+errors without enumerating an account during registration.
+
+Set email confirmation per your deployment policy; if turned ON, anonymous
+self-signup with the pseudo-email transport will no longer return a session.
 
 ## Scripts
 
@@ -89,7 +96,7 @@ The following are **not** represented as passing automated tests; they are manua
 
 `npm run build` produces static assets in `dist/`. `wrangler.jsonc` mounts `./dist` as Workers Static Assets with a SPA single-page fallback, which honors `public/_headers` (copied into `dist`). Headers shipped include a strict CSP (`connect-src` limited to self + `https://*.supabase.co` and `wss://*.supabase.co` for realtime), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, HSTS, and a `Permissions-Policy` that denies unused browser APIs.
 
-Canonical production URL: `https://open-freedom-forum.photo-studio.workers.dev/`
+Canonical production URL: `https://off.testingver.workers.dev/`
 
 ## Manual database integration checklist (pre-release)
 

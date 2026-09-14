@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "open-freedom-forum",
+  "name": "off",
+  "account_id": "9adb20cd3ad3befe3396618f34561d0c",
   "compatibility_date": "2026-09-03",
   "observability": {
     "enabled": true
