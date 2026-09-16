@@ -39,7 +39,7 @@ describe("component smoke (universal render)", () => {
     const html = renderToStaticMarkup(<ChatShell session={session} />);
     expect(html).toContain("OPEN FREEDOM FORUM");
     expect(html).toContain("Home");
-    expect(html).toContain("Rooms");
+    expect(html).toContain("Communities");
     expect(html).toContain("You");
     expect(html).toContain("Loading rooms…");
   });

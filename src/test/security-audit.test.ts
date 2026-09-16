@@ -51,12 +51,19 @@ describe("migration chain integrity", () => {
       "202609060014_message_integrity_guard.sql",
       "202609060015_profile_field_guard.sql",
       "202609070001_username_status.sql",
+      "202609160001_dm_requests.sql",
+      "202609160002_blocks.sql",
+      "202609160003_privacy_flags.sql",
+      "202609160004_rls_privacy_policies.sql",
+      "202609160005_requests_blocks_rpc.sql",
     ]);
   });
-  it("enables RLS on the four core tables", () => {
-    const m = MIG("202609060001_off_mvp.sql");
-    for (const table of ["profiles", "rooms", "room_members", "messages"]) {
-      expect(m).toContain(`alter table public.${table} enable row level security`);
+  it("enables RLS on every application table in the chain", () => {
+    const chain = migrationNames.map((n) => MIG(n)).join("\n");
+    for (const table of ["profiles", "rooms", "room_members", "messages", "dm_threads", "user_interests", "dm_requests", "blocks"]) {
+      expect(chain, `${table} must enable RLS`).toContain(
+        `alter table public.${table} enable row level security`,
+      );
     }
   });
   it("caps message body length on the server", () => {
@@ -198,6 +205,81 @@ describe("username availability RPC (migration 016)", () => {
     expect(m).toMatch(/revoke all on function public\.username_status\(text\) from public;/);
     expect(m).toMatch(/grant execute on function public\.username_status\(text\) to anon, authenticated;/);
     expect(m).not.toMatch(/service_role/);
+  });
+});
+
+describe("requests, blocks, and privacy flags (migrations 160001-160005)", () => {
+  const requests = MIG("202609160001_dm_requests.sql");
+  const blocks = MIG("202609160002_blocks.sql");
+  const flags = MIG("202609160003_privacy_flags.sql");
+  const privacyPolicies = MIG("202609160004_rls_privacy_policies.sql");
+  const rpc = MIG("202609160005_requests_blocks_rpc.sql");
+  const rpcNames = [
+    "send_dm_request",
+    "accept_dm_request",
+    "reject_dm_request",
+    "block_user",
+    "unblock_user",
+  ];
+
+  it("dm_requests enables RLS and grants only scoped SELECT readers", () => {
+    expect(requests).toMatch(/alter table public\.dm_requests enable row level security/);
+    expect(requests).toMatch(/dm_requests_select on dm_requests for select to authenticated/);
+    expect(requests).toMatch(/recipient_id = auth\.uid\(\) or sender_id = auth\.uid\(\)/);
+    expect(requests).toMatch(/revoke all on table public\.dm_requests from anon/);
+    expect(requests).not.toMatch(/for insert|for update|for delete/);
+  });
+  it("blocks enables RLS and is readable only by the blocker", () => {
+    expect(blocks).toMatch(/alter table public\.blocks enable row level security/);
+    expect(blocks).toMatch(/blocks_select_own on blocks for select to authenticated/);
+    expect(blocks).toMatch(/using \(blocker_id = auth\.uid\(\)\)/);
+    expect(blocks).not.toMatch(/for insert|for update|for delete/);
+  });
+  it("privacy flags default to private", () => {
+    expect(flags).toMatch(/discoverable boolean not null default false/);
+    expect(flags).toMatch(/contactable boolean not null default false/);
+  });
+  it("privacy policies never reference a non-existent user_id column", () => {
+    expect(privacyPolicies).toMatch(/using \(id = auth\.uid\(\) or discoverable\)/);
+    expect(privacyPolicies).not.toMatch(/user_id = auth\.uid\(\)/);
+  });
+  it("provides the sender-label carve-out RPC, scoped like the helper RPCs", () => {
+    expect(privacyPolicies).toMatch(/function public\.resolve_sender_names\(uuid\[\]\)/);
+    expect(privacyPolicies).toMatch(/returns table \(id uuid, username text, display_name text, avatar_url text\)/);
+    expect(privacyPolicies).toMatch(/security definer set search_path = public/);
+    expect(privacyPolicies).toMatch(/revoke all on function public\.resolve_sender_names\(uuid\[\]\) from public/);
+    expect(privacyPolicies).toMatch(/grant execute on function public\.resolve_sender_names\(uuid\[\]\) to authenticated/);
+  });
+  it("the full request/block lifecycle lives in SECURITY DEFINER RPCs", () => {
+    for (const fn of rpcNames) {
+      expect(rpc, fn).toMatch(new RegExp(`function public\\.${fn}\\(`));
+      expect(rpc, fn).toMatch(/security definer set search_path = public/);
+    }
+  });
+  it("every new mutation RPC is revoked from public and granted to authenticated", () => {
+    for (const fn of rpcNames) {
+      expect(rpc, fn).toMatch(new RegExp(`revoke all on function public\\.${fn}\\(uuid\\) from public`));
+      expect(rpc, fn).toMatch(new RegExp(`grant execute on function public\\.${fn}\\(uuid\\) to authenticated`));
+    }
+  });
+  it("dm_requests and blocks are part of the realtime publication only as scoped rows", () => {
+    const publication = migrationNames.map((n) => MIG(n)).join("\n");
+    expect(publication).toMatch(/alter publication supabase_realtime add table public\.dm_requests/);
+  });
+  it("request/thread boundaries enforce blocks server-side", () => {
+    expect(rpc).toMatch(/is_blocked\(auth\.uid\(\), target_user\) or public\.is_blocked\(target_user, auth\.uid\(\)\)/);
+  });
+  it("thread creation requires an accepted request or an existing thread", () => {
+    expect(rpc).toMatch(/A mutual message request is required before you can start a conversation/);
+  });
+  it("existing tables still satisfy the universal RLS requirement", () => {
+    const chain = migrationNames.map((n) => MIG(n)).join("\n");
+    expect(chain, "profiles").toContain("alter table public.profiles enable row level security");
+    expect(chain, "rooms").toContain("alter table public.rooms enable row level security");
+    expect(chain, "room_members").toContain("alter table public.room_members enable row level security");
+    expect(chain, "messages").toContain("alter table public.messages enable row level security");
+    expect(chain, "dm_threads").toContain("alter table public.dm_threads enable row level security");
+    expect(chain, "user_interests").toContain("alter table public.user_interests enable row level security");
   });
 });
 

@@ -301,13 +301,13 @@ export function ChatShell({ session }: { session: Session }) {
       ))}
       {!active && (
         <section>
-          <p>ROOMS</p>
+          <p>COMMUNITIES</p>
           <p className="nav-empty">Loading rooms…</p>
         </section>
       )}
       {sections.length === 0 && rooms.length > 0 && (
         <section>
-          <p>ROOMS</p>
+          <p>COMMUNITIES</p>
           <p className="nav-empty">You have not joined any communities yet.</p>
         </section>
       )}
@@ -537,7 +537,7 @@ export function ChatShell({ session }: { session: Session }) {
           onClick={() => setRoomsOpen(true)}
         >
           <span>☷</span>
-          Rooms
+          Communities
         </button>
         <button
           role="tab"
