@@ -56,6 +56,7 @@ describe("migration chain integrity", () => {
       "202609160003_privacy_flags.sql",
       "202609160004_rls_privacy_policies.sql",
       "202609160005_requests_blocks_rpc.sql",
+      "202609160006_onboarding_slim.sql",
     ]);
   });
   it("enables RLS on every application table in the chain", () => {

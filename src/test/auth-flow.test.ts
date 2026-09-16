@@ -68,39 +68,32 @@ describe("debounce", () => {
 
 describe("onboarding progress", () => {
   const done = "2026-09-06T00:00:00.000Z";
-  const state = (flags: [string | null, string | null, string | null, string | null]) => ({
+  const state = (flags: [string | null, string | null]) => ({
     recovery_acknowledged_at: flags[0],
     profile_completed_at: flags[1],
-    country_handled_at: flags[2],
-    interests_handled_at: flags[3],
   });
   it("starts empty at 0%", () => {
-    const p = onboardingProgress(state([null, null, null, null]));
+    const p = onboardingProgress(state([null, null]));
     expect(p.percent).toBe(0);
     expect(p.current).toBe("recovery");
   });
-  it("reports 25% per completed step", () => {
-    const p = onboardingProgress(state([done, null, null, null]));
-    expect(p.percent).toBe(25);
+  it("reports 50% per completed step", () => {
+    const p = onboardingProgress(state([done, null]));
+    expect(p.percent).toBe(50);
     expect(p.current).toBe("profile");
   });
   it("reports 100% and no current step when finished", () => {
-    const p = onboardingProgress(state([done, done, done, done]));
+    const p = onboardingProgress(state([done, done]));
     expect(p.percent).toBe(100);
     expect(p.current).toBeNull();
   });
-  it("labels steps Recovery, Profile, Country, Interests", () => {
-    const p = onboardingProgress(state([null, null, null, null]));
-    expect(p.steps.map((s) => s.label)).toEqual([
-      "Recovery",
-      "Profile",
-      "Country",
-      "Interests",
-    ]);
+  it("labels steps Recovery, Profile", () => {
+    const p = onboardingProgress(state([null, null]));
+    expect(p.steps.map((s) => s.label)).toEqual(["Recovery", "Profile"]);
   });
   it("marks only completed steps as done", () => {
-    const p = onboardingProgress(state([done, null, done, null]));
-    expect(p.steps.map((s) => s.done)).toEqual([true, false, true, false]);
+    const p = onboardingProgress(state([done, null]));
+    expect(p.steps.map((s) => s.done)).toEqual([true, false]);
   });
 });
 

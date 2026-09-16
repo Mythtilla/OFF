@@ -13,6 +13,9 @@ export type Profile = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  bio?: string | null;
+  discoverable?: boolean;
+  contactable?: boolean;
 };
 export type Message = {
   id: string;

@@ -22,7 +22,7 @@ export function ProfileStep({
     <main className="auth">
       <form onSubmit={submit}>
         <b>OFF</b>
-        <p className="eyebrow">STEP 2 OF 4</p>
+        <p className="eyebrow">STEP 2 OF 2</p>
         <h1>Create your profile.</h1>
         <label>
           Display name

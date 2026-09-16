@@ -22,6 +22,8 @@ import {
   groupRooms,
   visibleRooms,
 } from "../../services/navigation/layout";
+import { Avatar } from "./Avatar";
+import { ProfileSettings } from "./ProfileSettings";
 
 function Sheet({
   open,
@@ -71,6 +73,7 @@ export function ChatShell({ session }: { session: Session }) {
     [channelStatus, setChannelStatus] = useState<ChannelStatus>("Connecting"),
     [roomsOpen, setRoomsOpen] = useState(false),
     [youOpen, setYouOpen] = useState(false),
+    [profileOpen, setProfileOpen] = useState(false),
     [detailsOpen, setDetailsOpen] = useState(() => {
       const mq =
         typeof window !== "undefined" && window.matchMedia
@@ -102,7 +105,7 @@ export function ChatShell({ session }: { session: Session }) {
     if (!client) return;
     client
       .from("profiles")
-      .select("id,username,display_name,avatar_url")
+      .select("id,username,display_name,avatar_url,bio,discoverable,contactable")
       .eq("id", session.user.id)
       .single()
       .then(({ data, error }) => {
@@ -315,18 +318,38 @@ export function ChatShell({ session }: { session: Session }) {
   );
 
   const identity = (
-    <div className="account">
-      <div className="avatar">
-        {(selfProfile?.display_name ||
-          selfProfile?.username ||
-          "?").slice(0, 1)[0]?.toUpperCase() ?? "?"}
+    <>
+      <div className="account">
+        <Avatar
+          name={selfProfile?.display_name || selfProfile?.username || "?"}
+          url={selfProfile?.avatar_url}
+        />
+        <div>
+          <b>{selfProfile?.display_name || "Member"}</b>
+          <span>@{selfProfile?.username ?? session.user.user_metadata.username ?? "?"}</span>
+        </div>
+        <button
+          aria-label={profileOpen ? "Close profile settings" : "Open profile settings"}
+          aria-expanded={profileOpen}
+          onClick={() => setProfileOpen((open) => !open)}
+        >
+          {profileOpen ? "✕" : "✎"}
+        </button>
+        <button onClick={() => supabase?.auth.signOut()}>Sign out</button>
       </div>
-      <div>
-        <b>{selfProfile?.display_name || "Member"}</b>
-        <span>@{selfProfile?.username ?? session.user.user_metadata.username ?? "?"}</span>
-      </div>
-      <button onClick={() => supabase?.auth.signOut()}>Sign out</button>
-    </div>
+      {profileOpen && selfProfile && (
+        <div className="account-profile">
+          <ProfileSettings
+            session={session}
+            profile={selfProfile}
+            onSaved={(updated) => {
+              setSelfProfile(updated);
+              setSenders((previous) => mergeSenderBatch(previous, [updated]));
+            }}
+          />
+        </div>
+      )}
+    </>
   );
 
   return (
@@ -424,9 +447,11 @@ export function ChatShell({ session }: { session: Session }) {
                     key={message.id}
                   >
                     {first && (
-                      <div className="avatar">
-                        {name.slice(0, 1).toUpperCase()}
-                      </div>
+                      <Avatar
+                        name={name}
+                        url={senders[message.sender_id]?.avatar_url}
+                        large={false}
+                      />
                     )}
                     <div className="body">
                       {first && (
@@ -563,11 +588,25 @@ export function ChatShell({ session }: { session: Session }) {
 
       <Sheet open={youOpen} onClose={() => setYouOpen(false)} title="You">
         <div className="you">
-          <div className="avatar large">
-            {(selfProfile?.display_name || selfProfile?.username || "?").slice(0, 1).toUpperCase()}
-          </div>
+          <Avatar
+            name={
+              selfProfile?.display_name || selfProfile?.username || "?"
+            }
+            url={selfProfile?.avatar_url}
+            large
+          />
           <b>{selfProfile?.display_name || "Member"}</b>
           <span>@{selfProfile?.username ?? session.user.user_metadata.username ?? "—"}</span>
+          {selfProfile && (
+            <ProfileSettings
+              session={session}
+              profile={selfProfile}
+              onSaved={(updated) => {
+                setSelfProfile(updated);
+                setSenders((previous) => mergeSenderBatch(previous, [updated]));
+              }}
+            />
+          )}
           <button className="room-join" onClick={() => supabase?.auth.signOut()}>
             Sign out
           </button>

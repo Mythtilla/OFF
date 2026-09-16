@@ -113,20 +113,13 @@ describe("availability failure degradation", () => {
 
 describe("onboarding progress remainder", () => {
   const done = "2026-09-06T00:00:00.000Z";
-  const state = (flags: [string | null, string | null, string | null, string | null]) => ({
+  const state = (flags: [string | null, string | null]) => ({
     recovery_acknowledged_at: flags[0],
     profile_completed_at: flags[1],
-    country_handled_at: flags[2],
-    interests_handled_at: flags[3],
   });
-  it("reports 50% when the first two steps are complete", () => {
-    const p = onboardingProgress(state([done, done, null, null]));
-    expect(p.percent).toBe(50);
-    expect(p.current).toBe("country");
-  });
-  it("reports 75% and points at the last step", () => {
-    const p = onboardingProgress(state([done, done, done, null]));
-    expect(p.percent).toBe(75);
-    expect(p.current).toBe("interests");
+  it("reports 100% and no current step when finished", () => {
+    const p = onboardingProgress(state([done, done]));
+    expect(p.percent).toBe(100);
+    expect(p.current).toBeNull();
   });
 });

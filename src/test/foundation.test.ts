@@ -139,19 +139,16 @@ describe("interests", () => {
 
 describe("onboarding state machine", () => {
   it("starts at recovery when nothing done", () => {
-    expect(nextOnboardingStep({ recovery: false, profile: false, country: false, interests: false })).toBe("recovery");
+    expect(nextOnboardingStep({ recovery: false, profile: false })).toBe("recovery");
   });
   it("advances through each step", () => {
-    expect(nextOnboardingStep({ recovery: true, profile: false, country: false, interests: false })).toBe("profile");
-    expect(nextOnboardingStep({ recovery: true, profile: true, country: false, interests: false })).toBe("country");
-    expect(nextOnboardingStep({ recovery: true, profile: true, country: true, interests: false })).toBe("interests");
-    expect(nextOnboardingStep({ recovery: true, profile: true, country: true, interests: true })).toBe("complete");
+    expect(nextOnboardingStep({ recovery: true, profile: false })).toBe("profile");
+    expect(nextOnboardingStep({ recovery: true, profile: true })).toBe("complete");
   });
   it("is resumable from any checkpoint", () => {
-    expect(nextOnboardingStep({ recovery: true, profile: false, country: false, interests: false })).toBe("profile");
-    expect(nextOnboardingStep({ recovery: true, profile: true, country: false, interests: false })).toBe("country");
+    expect(nextOnboardingStep({ recovery: true, profile: false })).toBe("profile");
   });
   it("skips to correct step if earlier steps done", () => {
-    expect(nextOnboardingStep({ recovery: false, profile: true, country: false, interests: false })).toBe("recovery");
+    expect(nextOnboardingStep({ recovery: false, profile: true })).toBe("recovery");
   });
 });

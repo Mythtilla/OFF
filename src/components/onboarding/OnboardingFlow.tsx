@@ -5,8 +5,6 @@ import { nextOnboardingStep } from "../../services/onboarding/state";
 import { onboardingProgress } from "../../services/onboarding/progress";
 import { RecoveryCeremony } from "./RecoveryCeremony";
 import { ProfileStep } from "./ProfileStep";
-import { CountryStep } from "./CountryStep";
-import { InterestsStep } from "./InterestsStep";
 
 type ProfileState = {
   username: string;
@@ -30,8 +28,6 @@ export function OnboardingFlow({
     nextOnboardingStep({
       recovery: !!profile.recovery_acknowledged_at,
       profile: !!profile.profile_completed_at,
-      country: !!profile.country_handled_at,
-      interests: !!profile.interests_handled_at,
     }),
   );
   const [error, setError] = useState("");
@@ -56,8 +52,6 @@ export function OnboardingFlow({
     const next = nextOnboardingStep({
       recovery: !!data.recovery_acknowledged_at,
       profile: !!data.profile_completed_at,
-      country: !!data.country_handled_at,
-      interests: !!data.interests_handled_at,
     });
     if (next === "complete") {
       onComplete();
@@ -124,36 +118,6 @@ export function OnboardingFlow({
               return;
             }
             setError("");
-            advance();
-          }}
-        />
-      )}
-      {step === "country" && (
-        <CountryStep
-          error={error}
-          onContinue={async () => {
-            const { error: rpcError } = await supabase!.rpc("handle_country");
-            if (rpcError) {
-              setError("Something went wrong. Please try again.");
-              return;
-            }
-            setError("");
-            advance();
-          }}
-        />
-      )}
-      {step === "interests" && (
-        <InterestsStep
-          error={error}
-          onContinue={async (slugs) => {
-            const { error: rpcError } = await supabase!.rpc(
-              "set_onboarding_interests",
-              { selected_slugs: slugs },
-            );
-            if (rpcError) {
-              setError("Something went wrong. Please try again.");
-              return;
-            }
             const { error: completeError } = await supabase!.rpc(
               "complete_onboarding",
             );
