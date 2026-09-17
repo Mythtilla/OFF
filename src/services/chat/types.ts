@@ -27,5 +27,6 @@ export type Message = {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  reply_to?: string | null;
   profile?: Profile | null;
 };

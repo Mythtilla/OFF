@@ -641,6 +641,81 @@ img.avatar {
   text-align: left;
 }
 
+/* ---------- chat list ---------- */
+.chat-search {
+  width: 100%;
+  margin: 0 0 10px;
+  background: var(--input);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.chat-search:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.chat-list-room {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 9px 10px;
+  margin: 2px 0;
+  color: var(--text2);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.chat-list-room.selected {
+  background: var(--surface2);
+  color: var(--text);
+}
+.chat-list-room .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+.chat-list-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.chat-list-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-list-name .hash {
+  color: var(--text3);
+  font: 13px var(--font-mono);
+}
+.chat-list-preview {
+  font-size: 12px;
+  color: var(--text3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-list-room.selected .chat-list-preview {
+  color: var(--text2);
+}
+.chat-list-time {
+  flex: none;
+  font: 10px var(--font-mono);
+  color: var(--text3);
+}
+
 /* ---------- conversation ---------- */
 .conversation {
   min-width: 0;
@@ -775,13 +850,180 @@ img.avatar {
   text-align: center;
   padding: 8px;
 }
+
+/* ---------- message bubbles ---------- */
+.date-sep {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0 6px;
+}
+.date-sep span {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text3);
+  font: 10px var(--font-mono);
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.empty + .date-sep {
+  margin-top: 0;
+}
+.bubble-row {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 7px 0;
+}
+.bubble-row + .bubble-row {
+  margin-top: 4px;
+}
+.bubble-row .bubble {
+  max-width: min(560px, 74%);
+}
+.bubble-row.own {
+  flex-direction: row-reverse;
+}
+.bubble {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 7px 42px 5px 12px;
+  min-width: 0;
+}
+.bubble-row.other .bubble {
+  border-top-left-radius: 2px;
+}
+.bubble-row.own .bubble {
+  background: var(--accent);
+  border-color: var(--accent);
+  border-top-right-radius: 2px;
+}
+.bubble p {
+  margin: 1px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bubble-row.own .bubble p {
+  color: var(--accent-ink);
+}
+.bubble-sender {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bubble-reply {
+  border-left: 2px solid var(--border2);
+  padding-left: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bubble-row.own .bubble-reply {
+  border-left-color: rgba(26, 24, 18, 0.3);
+  color: rgba(26, 24, 18, 0.75);
+}
+.bubble-reply span {
+  font: 10px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.bubble-deleted {
+  font-style: italic;
+  opacity: 0.7;
+}
+.bubble-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text3);
+  font: 10px var(--font-mono);
+}
+.bubble-row.own .bubble-meta {
+  color: var(--accent-ink);
+  opacity: 0.8;
+}
+.bubble-edited {
+  font-style: italic;
+}
+.bubble-action {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 30px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  color: var(--text3);
+  font-size: 14px;
+  border-radius: var(--radius);
+  opacity: 0;
+}
+.bubble:hover .bubble-action,
+.bubble-action[aria-expanded="true"],
+.bubble-action:focus-visible {
+  opacity: 1;
+}
+.bubble-row.own .bubble-action {
+  color: var(--accent-ink);
+  opacity: 0.4;
+}
+.bubble-row.own .bubble:hover .bubble-action {
+  opacity: 0.9;
+}
+.msg-menu {
+  position: absolute;
+  bottom: calc(100% - 6px);
+  right: 4px;
+  z-index: 30;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.msg-menu button {
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font-size: 13px;
+  padding: 9px 10px;
+  border-radius: 6px;
+}
+.msg-menu button:hover {
+  background: var(--surface2);
+}
 .composer {
   border-top: 1px solid var(--border);
-  padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+}
+.composer-row {
   display: flex;
   gap: 8px;
   align-items: stretch;
-  background: var(--bg);
 }
 .composer input {
   flex: 1;
@@ -799,6 +1041,40 @@ img.avatar {
 }
 .composer button:disabled {
   opacity: 0.45;
+}
+.composer-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.composer-chip-label {
+  flex: none;
+  font: 10px var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.composer-chip-body {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-chip button {
+  width: 32px;
+  flex: none;
+  min-height: 32px;
+  background: none;
+  border: 0;
+  color: var(--text3);
+  font-size: 12px;
 }
 
 /* ---------- details panel ---------- */
@@ -913,7 +1189,7 @@ img.avatar {
   .messages {
     padding: 10px 12px;
   }
-  .message .body p {
+  .bubble p {
     font-size: 15px;
   }
   .composer {
@@ -925,6 +1201,10 @@ img.avatar {
   }
   .composer button {
     min-height: 48px;
+  }
+  .composer-chip button {
+    min-height: 32px;
+    width: 32px;
   }
   .bottom-nav {
     display: flex;

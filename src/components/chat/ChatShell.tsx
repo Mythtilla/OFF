@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../../integrations/supabase/client";
 import { canPostToRoom } from "../../services/rooms/permissions";
 import {
-  groupMessages,
+  buildRenderList,
+  reconcileDelete,
   reconcileMessage,
+  reconcileUpdate,
+  shortTime,
   validateMessageBody,
   type PendingMessage,
 } from "../../services/chat/messages";
@@ -18,12 +21,12 @@ import {
   channelStatusLabel,
   type ChannelStatus,
 } from "../../services/chat/status";
-import {
-  groupRooms,
-  visibleRooms,
-} from "../../services/navigation/layout";
+import { visibleRooms } from "../../services/navigation/layout";
+import type { Preview } from "../../services/chat/previews";
+import { groupPreviews } from "../../services/chat/previews";
 import { Avatar } from "./Avatar";
 import { ProfileSettings } from "./ProfileSettings";
+import ChatList from "./ChatList";
 
 function Sheet({
   open,
@@ -66,9 +69,14 @@ export function ChatShell({ session }: { session: Session }) {
   const [rooms, setRooms] = useState<Room[]>([]),
     [active, setActive] = useState<Room | null>(null),
     [messages, setMessages] = useState<PendingMessage[]>([]),
+    [previews, setPreviews] = useState<Preview[]>([]),
     [senders, setSenders] = useState<Record<string, Profile>>({}),
     [selfProfile, setSelfProfile] = useState<Profile | null>(null),
     [draft, setDraft] = useState(""),
+    [replyTarget, setReplyTarget] = useState<PendingMessage | null>(null),
+    [editingMsg, setEditingMsg] = useState<PendingMessage | null>(null),
+    [actionFor, setActionFor] = useState<string | null>(null),
+    [roomQuery, setRoomQuery] = useState(""),
     [error, setError] = useState(""),
     [channelStatus, setChannelStatus] = useState<ChannelStatus>("Connecting"),
     [roomsOpen, setRoomsOpen] = useState(false),
@@ -82,7 +90,8 @@ export function ChatShell({ session }: { session: Session }) {
       return mq ? mq.matches : true;
     });
   const requestRef = useRef(0),
-    sendersRef = useRef(senders);
+    sendersRef = useRef(senders),
+    messagesEndRef = useRef<HTMLDivElement>(null);
   sendersRef.current = senders;
 
   function ensureSenders(ids: string[]) {
@@ -139,6 +148,23 @@ export function ChatShell({ session }: { session: Session }) {
         setRooms(next);
         const worldRoom = next.find((r) => r.kind === "world");
         setActive(worldRoom ?? next[0] ?? null);
+        const joinedRooms = next.filter((room) => room.is_member);
+        if (joinedRooms.length) {
+          client
+            .from("messages")
+            .select("id,room_id,body,created_at")
+            .in(
+              "room_id",
+              joinedRooms.map((room) => room.id),
+            )
+            .is("deleted_at", null)
+            .order("created_at", { ascending: false })
+            .limit(1000)
+            .then(({ data: previewRows, error: previewError }) => {
+              if (previewError || !previewRows?.length) return;
+              setPreviews(groupPreviews(previewRows));
+            });
+        }
       });
   }, [session.user.id]);
 
@@ -149,10 +175,12 @@ export function ChatShell({ session }: { session: Session }) {
     setMessages([]);
     setError("");
     setChannelStatus("Connecting");
+    setReplyTarget(null);
+    setEditingMsg(null);
     client
       .from("messages")
       .select(
-        "id,room_id,thread_id,sender_id,body,client_event_id,created_at,edited_at,deleted_at,profiles(id,username,display_name,avatar_url)",
+        "id,room_id,thread_id,sender_id,body,client_event_id,created_at,edited_at,deleted_at,reply_to,profiles(id,username,display_name,avatar_url)",
       )
       .eq("room_id", active.id)
       .is("deleted_at", null)
@@ -182,6 +210,33 @@ export function ChatShell({ session }: { session: Session }) {
           ensureSenders([row.sender_id]);
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `room_id=eq.${active.id}`,
+        },
+        (payload) => {
+          const row = payload.new as PendingMessage;
+          setMessages((current) => reconcileUpdate(current, row));
+          ensureSenders([row.sender_id]);
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "messages",
+          filter: `room_id=eq.${active.id}`,
+        },
+        (payload) => {
+          const id = (payload.old as { id: string }).id;
+          setMessages((current) => reconcileDelete(current, id));
+        },
+      )
       .subscribe((status) => {
         if (requestId !== requestRef.current) return;
         setChannelStatus(status as ChannelStatus);
@@ -191,11 +246,32 @@ export function ChatShell({ session }: { session: Session }) {
     };
   }, [active]);
 
-  async function send(e: React.FormEvent) {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, active]);
+
+  async function submitDraft(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !active) return;
     const checked = validateMessageBody(draft);
     if (checked.error) return setError(checked.error);
+    if (editingMsg) {
+      const { data, error } = await supabase
+        .from("messages")
+        .update({ body: checked.value, edited_at: new Date().toISOString() })
+        .eq("id", editingMsg.id)
+        .select(
+          "id,room_id,thread_id,sender_id,body,client_event_id,created_at,edited_at,deleted_at,reply_to",
+        )
+        .single();
+      if (error) return setError("Couldn't update message.");
+      setMessages((current) =>
+        reconcileUpdate(current, data as PendingMessage),
+      );
+      setDraft("");
+      setEditingMsg(null);
+      return;
+    }
     const client_event_id = crypto.randomUUID(),
       optimistic: PendingMessage = {
         id: `local-${client_event_id}`,
@@ -207,6 +283,7 @@ export function ChatShell({ session }: { session: Session }) {
         created_at: new Date().toISOString(),
         edited_at: null,
         deleted_at: null,
+        reply_to: replyTarget?.id ?? null,
         pending: true,
       };
     setDraft("");
@@ -219,47 +296,100 @@ export function ChatShell({ session }: { session: Session }) {
         sender_id: session.user.id,
         body: checked.value,
         client_event_id,
+        reply_to:
+          replyTarget && !replyTarget.id.startsWith("local-")
+            ? replyTarget.id
+            : null,
       })
       .select(
-        "id,room_id,thread_id,sender_id,body,client_event_id,created_at,edited_at,deleted_at",
+        "id,room_id,thread_id,sender_id,body,client_event_id,created_at,edited_at,deleted_at,reply_to",
       )
       .single();
     if (error) {
       setMessages((x) => x.filter((m) => m.client_event_id !== client_event_id));
       setError("Couldn't send message.");
     } else setMessages((x) => reconcileMessage(x, data as PendingMessage));
+    if (replyTarget) setReplyTarget(null);
   }
 
-  async function toggleMembership() {
+  async function handleDelete(msg: PendingMessage) {
+    setActionFor(null);
+    if (!supabase || msg.id.startsWith("local-")) return;
+    const deletedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("messages")
+      .update({ deleted_at: deletedAt })
+      .eq("id", msg.id);
+    if (error) return setError("Couldn't delete message.");
+    setMessages((current) => reconcileUpdate(current, { ...msg, deleted_at: deletedAt }));
+  }
+
+  async function handleCopy(msg: PendingMessage) {
+    setActionFor(null);
+    try {
+      await navigator.clipboard?.writeText(msg.body);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  function handleReply(msg: PendingMessage) {
+    setActionFor(null);
+    setEditingMsg(null);
+    setReplyTarget(msg);
+  }
+
+  function handleEdit(msg: PendingMessage) {
+    setActionFor(null);
+    setReplyTarget(null);
+    setEditingMsg(msg);
+    setDraft(msg.body);
+  }
+
+  function cancelEdit() {
+    setEditingMsg(null);
+    setDraft("");
+  }
+
+  function toggleMembership() {
     if (!supabase || !active || active.kind === "world") return;
     const rpc = active.is_member ? "leave_room" : "join_public_room";
-    const { error: membershipError } = await supabase.rpc(rpc, {
-      target_room: active.id,
+    void supabase.rpc(rpc, { target_room: active.id }).then(({ error }) => {
+      if (error) {
+        setError("Couldn't update membership.");
+        return;
+      }
+      setRooms((current) =>
+        current.map((room) =>
+          room.id === active.id ? { ...room, is_member: !room.is_member } : room,
+        ),
+      );
+      setActive((current) =>
+        current ? { ...current, is_member: !current.is_member } : current,
+      );
     });
-    if (membershipError) {
-      setError("Couldn't update membership.");
-      return;
-    }
-    setRooms((current) =>
-      current.map((room) =>
-        room.id === active.id ? { ...room, is_member: !room.is_member } : room,
-      ),
-    );
-    setActive((current) =>
-      current ? { ...current, is_member: !current.is_member } : current,
-    );
   }
 
   const memberIds = new Set(
     rooms.filter((room) => room.is_member).map((room) => room.id),
   );
-  const sections = groupRooms(visibleRooms(rooms, memberIds));
+  const membershipMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const id of memberIds) map[id] = true;
+    return map;
+  }, [memberIds]);
+  const previewMap: Record<string, Preview> = useMemo(() => {
+    const map: Record<string, Preview> = {};
+    for (const preview of previews) map[preview.room_id] = preview;
+    return map;
+  }, [previews]);
   const world = rooms.find((room) => room.kind === "world") ?? null;
   const statusLabel = channelStatusLabel(channelStatus);
 
   const select = (room: Room) => {
     setActive(room);
     setRoomsOpen(false);
+    setRoomQuery("");
   };
 
   const selectWorld = () => {
@@ -268,47 +398,37 @@ export function ChatShell({ session }: { session: Session }) {
 
   const sendDisabled = !canPostToRoom(active);
 
+  const replyMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const message of messages) {
+      if (!map.has(message.id)) map.set(message.id, message.body);
+    }
+    return map;
+  }, [messages]);
+  const renderItems = buildRenderList(messages, replyMap);
+  const visibleNavRooms = visibleRooms(rooms, memberIds);
+
+  const chatList = (
+    <ChatList
+      rooms={visibleNavRooms}
+      active={active}
+      previews={previewMap}
+      members={membershipMap}
+      query={roomQuery}
+      onQueryChange={setRoomQuery}
+      onSelect={select}
+    />
+  );
+
   const secondaryNav = (
     <>
-      {sections.map((section) => (
-        <section key={section.id}>
-          <p>
-            {section.title}
-            {section.id === "custom" && (
-              <span
-                className="priv-count"
-                title="Private rooms are visible only to members"
-              >
-                {section.rooms.filter((r) => r.is_private).length > 0
-                  ? "🔒"
-                  : ""}
-              </span>
-            )}
-          </p>
-          {section.rooms.map((room) => (
-            <button
-              className={active?.id === room.id ? "selected" : ""}
-              key={room.id}
-              onClick={() => select(room)}
-            >
-              <span className="hash">#</span>
-              <span className="room-name">{room.name}</span>
-              {room.is_private && (
-                <span className="lock" aria-label="Private room">
-                  🔒
-                </span>
-              )}
-            </button>
-          ))}
-        </section>
-      ))}
-      {!active && (
+      {visibleNavRooms.length === 0 && !active && (
         <section>
           <p>COMMUNITIES</p>
           <p className="nav-empty">Loading rooms…</p>
         </section>
       )}
-      {sections.length === 0 && rooms.length > 0 && (
+      {visibleNavRooms.length === 0 && rooms.length > 0 && !active && (
         <section>
           <p>COMMUNITIES</p>
           <p className="nav-empty">You have not joined any communities yet.</p>
@@ -359,12 +479,7 @@ export function ChatShell({ session }: { session: Session }) {
           OFF <small>OPEN FREEDOM FORUM</small>
         </div>
         <nav aria-label="Rooms">
-          <button
-            className={active?.kind === "world" ? "world selected" : "world"}
-            onClick={selectWorld}
-          >
-            <span className="hash">#</span> World
-          </button>
+          {chatList}
           {secondaryNav}
         </nav>
         {identity}
@@ -379,6 +494,11 @@ export function ChatShell({ session }: { session: Session }) {
           >
             #
           </button>
+          <Avatar
+            name={active?.name ?? "?"}
+            url={active ? undefined : null}
+            large={false}
+          />
           <div className="room-id">
             <p className="eyebrow">
               {active?.kind === "world"
@@ -430,68 +550,92 @@ export function ChatShell({ session }: { session: Session }) {
             </p>
           )}
           {messages.length === 0 && active && !error && (
-            <div className="empty">No messages yet. Start the conversation.</div>
-          )}
-          {groupMessages(messages).map((group) => (
-            <div className="group" key={group.messages[0].id}>
-              {group.messages.map((message, index) => {
-                const first = index === 0;
-                const name = senderName(
-                  message.sender_id,
-                  senders,
-                  message.profile,
-                );
-                return (
-                  <article
-                    className={first ? "message" : "message tucked"}
-                    key={message.id}
-                  >
-                    {first && (
-                      <Avatar
-                        name={name}
-                        url={senders[message.sender_id]?.avatar_url}
-                        large={false}
-                      />
-                    )}
-                    <div className="body">
-                      {first && (
-                        <div className="meta">
-                          <b>
-                            {message.sender_id === session.user.id
-                              ? "You"
-                              : name}
-                          </b>
-                          <time dateTime={message.created_at}>
-                            {new Intl.DateTimeFormat(undefined, {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }).format(new Date(message.created_at))}
-                          </time>
-                        </div>
-                      )}
-                      <p>{message.body}</p>
-                    </div>
-                  </article>
-                );
-              })}
+            <div className="empty">
+              No messages yet. Start the conversation.
             </div>
-          ))}
+          )}
+          {renderItems.map((item) => {
+            if (item.kind === "date")
+              return (
+                <div key={item.key} className="date-sep" role="separator">
+                  <span>{item.label}</span>
+                </div>
+              );
+            return (
+              <MessageBubble
+                key={item.message.id}
+                message={item.message}
+                first={item.first}
+                replyBody={item.replyBody}
+                own={item.message.sender_id === session.user.id}
+                senderName={senderName(
+                  item.message.sender_id,
+                  senders,
+                  item.message.profile,
+                )}
+                avatarUrl={senders[item.message.sender_id]?.avatar_url}
+                actionFor={actionFor}
+                onToggleAction={(id) =>
+                  setActionFor((current) => (current === id ? null : id))
+                }
+                onReply={() => handleReply(item.message)}
+                onEdit={() => handleEdit(item.message)}
+                onDelete={() => void handleDelete(item.message)}
+                onCopy={() => void handleCopy(item.message)}
+              />
+            );
+          })}
+          <div ref={messagesEndRef} />
         </div>
 
-        <form className="composer" onSubmit={send}>
-          <label className="sr-only" htmlFor="message">
-            Message
-          </label>
-          <input
-            id="message"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={active ? "Write a message…" : "Choose a room"}
-            disabled={sendDisabled}
-          />
-          <button aria-label="Send message" disabled={sendDisabled}>
-            ↑
-          </button>
+        <form className="composer" onSubmit={submitDraft}>
+          {replyTarget && (
+            <div className="composer-chip">
+              <div className="composer-chip-label">
+                Replying to{" "}
+                {senderName(
+                  replyTarget.sender_id,
+                  senders,
+                  replyTarget.profile,
+                )}
+              </div>
+              <div className="composer-chip-body">{replyTarget.body}</div>
+              <button
+                type="button"
+                aria-label="Cancel reply"
+                onClick={() => setReplyTarget(null)}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          {editingMsg && (
+            <div className="composer-chip">
+              <div className="composer-chip-label">Editing message</div>
+              <button
+                type="button"
+                aria-label="Cancel edit"
+                onClick={cancelEdit}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          <div className="composer-row">
+            <label className="sr-only" htmlFor="message">
+              Message
+            </label>
+            <input
+              id="message"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={active ? "Write a message…" : "Choose a room"}
+              disabled={sendDisabled}
+            />
+            <button aria-label="Send message" disabled={sendDisabled}>
+              {editingMsg ? "✓" : "↑"}
+            </button>
+          </div>
         </form>
       </section>
 
@@ -539,7 +683,7 @@ export function ChatShell({ session }: { session: Session }) {
             <p>
               OFF stores only the information needed to operate the service.
               Conversations are protected by access controls, not end-to-end
-              encryption.
+              isolation.
             </p>
           </>
         ) : (
@@ -576,13 +720,7 @@ export function ChatShell({ session }: { session: Session }) {
 
       <Sheet open={roomsOpen} onClose={() => setRoomsOpen(false)} title="Communities">
         <nav className="sheet-rooms" aria-label="Rooms">
-          <button
-            className={active?.kind === "world" ? "world selected" : "world"}
-            onClick={selectWorld}
-          >
-            <span className="hash">#</span> World
-          </button>
-          {secondaryNav}
+          {chatList}
         </nav>
       </Sheet>
 
@@ -613,5 +751,96 @@ export function ChatShell({ session }: { session: Session }) {
         </div>
       </Sheet>
     </main>
+  );
+}
+
+function MessageBubble({
+  message,
+  first,
+  replyBody,
+  own,
+  senderName,
+  avatarUrl,
+  actionFor,
+  onToggleAction,
+  onReply,
+  onEdit,
+  onDelete,
+  onCopy,
+}: {
+  message: PendingMessage;
+  first: boolean;
+  replyBody?: string | null;
+  own: boolean;
+  senderName: string;
+  avatarUrl?: string | null;
+  actionFor: string | null;
+  onToggleAction: (id: string) => void;
+  onReply: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onCopy: () => void;
+}) {
+  const deleted = Boolean(message.deleted_at);
+  const menuOpen = actionFor === message.id;
+  return (
+    <div className={`bubble-row ${own ? "own" : "other"}`}>
+      {!own && first && (
+        <Avatar name={senderName} url={avatarUrl} large={false} />
+      )}
+      <article className="bubble">
+        {replyBody && (
+          <div className="bubble-reply">
+            <span>Reply</span> {replyBody}
+          </div>
+        )}
+        {first && !own && (
+          <div className="bubble-sender">{own ? "You" : senderName}</div>
+        )}
+        {deleted ? (
+          <p className="bubble-deleted">This message was deleted</p>
+        ) : (
+          <p>{message.body}</p>
+        )}
+        <div className="bubble-meta">
+          {message.edited_at ? (
+            <span className="bubble-edited">edited</span>
+          ) : null}
+          <time dateTime={message.created_at}>
+            {shortTime(message.created_at)}
+          </time>
+          {own ? <span className="bubble-tick">✓✓</span> : null}
+        </div>
+        <button
+          className="bubble-action"
+          type="button"
+          aria-label="Message actions"
+          aria-expanded={menuOpen}
+          onClick={() => onToggleAction(message.id)}
+        >
+          ⋯
+        </button>
+        {menuOpen && (
+          <div className="msg-menu" role="menu">
+            <button type="button" onClick={onReply}>
+              Reply
+            </button>
+            <button type="button" onClick={onCopy}>
+              Copy
+            </button>
+            {own && !message.pending && (
+              <>
+                <button type="button" onClick={onEdit}>
+                  Edit
+                </button>
+                <button type="button" onClick={onDelete}>
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </article>
+    </div>
   );
 }
