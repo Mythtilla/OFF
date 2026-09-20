@@ -24,6 +24,14 @@ import {
   draftFromMyProfile,
   type MyProfile,
 } from "../services/profile/profile";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import {
+  PROFILE_TABS,
+  SwitchRow,
+  VisibilitySegmented,
+  visibilityOptionLabel,
+} from "../components/chat/ProfileSettings";
 
 const mentions: MentionEntry[] = [
   { id: "u1", username: "alex", displayName: "Alex" },
@@ -329,5 +337,76 @@ describe("draftFromMyProfile", () => {
     expect(d.links).toEqual([
       { id: "l1", label: "Blog", url: "https://example.com", visibility: "everyone" },
     ]);
+  });
+});
+
+describe("PROFILE_TABS", () => {
+  it("orders the four edit sections as decided", () => {
+    expect(PROFILE_TABS.map((t) => t.id)).toEqual([
+      "profile",
+      "links",
+      "personal",
+      "privacy",
+    ]);
+  });
+});
+
+describe("visibilityOptionLabel", () => {
+  it("maps raw options to friendly labels", () => {
+    expect(visibilityOptionLabel("nobody")).toBe("No one");
+    expect(visibilityOptionLabel("only_me")).toBe("Only me");
+    expect(visibilityOptionLabel("connections")).toBe("Connections");
+    expect(visibilityOptionLabel("everyone")).toBe("Everyone");
+  });
+  it("returns unknown values untouched", () => {
+    expect(visibilityOptionLabel("staff")).toBe("staff");
+  });
+});
+
+describe("VisibilitySegmented", () => {
+  const props = {
+    label: "Who can see it",
+    value: "connections" as const,
+    options: ["only_me", "connections", "everyone"] as const,
+    onChange: () => {},
+  };
+  it("renders a radiogroup with one active radio", () => {
+    const html = renderToStaticMarkup(
+      createElement(VisibilitySegmented, { ...props, onChange: () => {} }),
+    );
+    expect(html).toContain('role="radiogroup"');
+    expect(html).toContain('aria-label="Who can see it"');
+    expect(html).toContain('role="radio"');
+    expect(html).toContain('aria-checked="true"');
+    expect(html.match(/aria-checked="true"/g)).toHaveLength(1);
+    expect(html).toContain('class="active"');
+    expect(html).toContain("Connections");
+    expect(html).toContain("Only me");
+  });
+});
+
+describe("SwitchRow", () => {
+  it("renders a switch input checked per state", () => {
+    const on = renderToStaticMarkup(
+      createElement(SwitchRow, {
+        label: "Public profile",
+        description: "Anyone can view.",
+        checked: true,
+        onChange: () => {},
+      }),
+    );
+    const off = renderToStaticMarkup(
+      createElement(SwitchRow, {
+        label: "Public profile",
+        checked: false,
+        onChange: () => {},
+      }),
+    );
+    expect(on).toContain('type="checkbox"');
+    expect(on).toContain('role="switch"');
+    expect(on).toContain('checked=""');
+    expect(on).toContain("Public profile");
+    expect(on).toContain("Anyone can view.");
+    expect(off).not.toContain('checked=""');
   });
 });
