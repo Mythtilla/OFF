@@ -18,7 +18,7 @@ export async function probeMessagingFeatures(): Promise<MessagingFeatures> {
   if (cached) return cached;
   const result: MessagingFeatures = { dmRequests: false, resolveSenderNames: false };
   if (supabase) {
-    const { error } = await supabase.rpc("resolve_sender_names", { sender_ids: [] });
+    const { error } = await supabase.rpc("resolve_sender_names", { p_ids: [] });
     result.resolveSenderNames = !error;
     result.dmRequests = result.resolveSenderNames;
   }

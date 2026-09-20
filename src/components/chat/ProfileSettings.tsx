@@ -297,7 +297,6 @@ export function ProfileSettings({
         discoverable: base.discoverable,
         contactable: base.contactable,
       });
-      window.setTimeout(() => dispatch({ type: "reset" }), 2000);
     } catch (err) {
       dispatch({ type: "error", message: err instanceof Error ? err.message : "Couldn't save. Try again." });
     }

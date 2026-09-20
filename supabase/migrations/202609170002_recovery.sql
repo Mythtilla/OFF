@@ -19,7 +19,7 @@
 
 create extension if not exists pgcrypto;
 
-create table public.recovery_verifiers (
+create table if not exists public.recovery_verifiers (
   user_id uuid primary key references public.profiles(id) on delete cascade,
   verifier text not null,
   failed_attempts integer not null default 0,
@@ -37,14 +37,14 @@ revoke all on table public.recovery_verifiers from public;
 -- stored as its 64-char hex encoding before the bcrypt cost-10 hash.
 create or replace function public.recovery_hash(p_phrase text)
 returns text
-language sql volatile security definer set search_path = public
+language sql volatile security definer set search_path = public, extensions
 as $$
   select crypt(encode(digest(p_phrase, 'sha256'), 'hex'), gen_salt('bf', 10));
 $$;
 
 create or replace function public.recovery_matches(p_phrase text, p_verifier text)
 returns boolean
-language sql volatile security definer set search_path = public
+language sql volatile security definer set search_path = public, extensions
 as $$
   select crypt(encode(digest(p_phrase, 'sha256'), 'hex'), p_verifier) = p_verifier;
 $$;
@@ -52,7 +52,7 @@ $$;
 -- The ceremony shows exactly 24 lowercase wordlist entries.
 create or replace function public.recovery_phrase_valid(p_phrase text)
 returns boolean
-language sql volatile security definer set search_path = public
+language sql volatile security definer set search_path = public, extensions
 as $$
   select v.cnt = 24 and v.ok = v.cnt
   from (
@@ -77,7 +77,7 @@ revoke all on function public.recovery_phrase_valid(text) from public;
 -- complete_onboarding (160006) keeps working without a second RPC call.
 create or replace function public.set_recovery_verifier(p_phrase text)
 returns void
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   uid uuid := auth.uid();
@@ -110,7 +110,7 @@ create or replace function public.recover_account(
   p_new_password text
 )
 returns void
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_user_id uuid;

@@ -16,21 +16,37 @@
 
 -- 1. Public profile columns ---------------------------------------------------
 
-alter table public.profiles
-  add column pronouns text[] not null default '{}'::text[],
-  add column profile_status text,
-  add column featured_song jsonb,
-  add column bio_mentions uuid[] not null default '{}'::uuid[],
-  add column mention_visibility text not null default 'everyone';
+-- Immutable helper: CHECK constraints may not contain subqueries, so the
+-- pronouns format rule lives here and the constraint calls it.
+create or replace function public.pronouns_valid(p text[])
+returns boolean
+language sql immutable
+as $$
+  select p is null or (
+    cardinality(p) <= 12
+    and not exists (
+      select 1 from unnest(p) as x
+      where char_length(x) > 32 or x !~ '^[a-z][a-z /]*$'
+    )
+  )
+$$;
 
 alter table public.profiles
-  add constraint profiles_pronouns_check check (
-    cardinality(pronouns) <= 12
-    and not exists (
-      select 1 from unnest(pronouns) p
-      where char_length(p) > 32 or p !~ '^[a-z][a-z /]*$'
-    )
-  ),
+  add column if not exists pronouns text[] not null default '{}'::text[],
+  add column if not exists profile_status text,
+  add column if not exists featured_song jsonb,
+  add column if not exists bio_mentions uuid[] not null default '{}'::uuid[],
+  add column if not exists mention_visibility text not null default 'everyone';
+
+alter table public.profiles
+  drop constraint if exists profiles_pronouns_check,
+  drop constraint if exists profiles_profile_status_len,
+  drop constraint if exists profiles_featured_song_check,
+  drop constraint if exists profiles_bio_mentions_check,
+  drop constraint if exists profiles_mention_visibility_check;
+
+alter table public.profiles
+  add constraint profiles_pronouns_check check (public.pronouns_valid(pronouns)),
   add constraint profiles_profile_status_len check (profile_status is null or char_length(profile_status) <= 80),
   add constraint profiles_featured_song_check check (
     featured_song is null
@@ -136,7 +152,7 @@ $$;
 -- are never listed. Rate-limited per identity to prevent enumeration.
 create or replace function public.search_users(p_query text, p_limit integer default 12)
 returns table (id uuid, username text, display_name text, avatar_url text)
-language plpgsql stable security definer set search_path = public
+language plpgsql volatile security definer set search_path = public
 as $$
 declare
   q text;
@@ -295,7 +311,7 @@ declare
   link jsonb;
   link_visibility text;
   mentions uuid[] := '{}'::uuid[];
-  pronouns text[] := '{}'::text[];
+  new_pronouns text[] := '{}'::text[];
   featured jsonb;
   result jsonb;
 begin
@@ -350,7 +366,7 @@ begin
 
   -- Pronouns: only override when the payload actually supplies an array.
   if payload ? 'pronouns' and jsonb_typeof(payload->'pronouns') = 'array' then
-    pronouns := coalesce((
+    new_pronouns := coalesce((
       select array_agg(x)
       from jsonb_array_elements_text(payload->'pronouns') e(x)
     ), '{}'::text[]);
@@ -366,7 +382,7 @@ begin
          bio = case when payload ? 'bio'
             then nullif(btrim(payload->>'bio'), '') else bio end,
          bio_mentions = mentions,
-         pronouns = pronouns,
+         pronouns = new_pronouns,
          profile_status = case when payload ? 'profile_status'
             then nullif(btrim(payload->>'profile_status'), '') else profile_status end,
          featured_song = case when payload ? 'featured_song' then featured else featured_song end,

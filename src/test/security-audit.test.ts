@@ -62,6 +62,8 @@ describe("migration chain integrity", () => {
       "202609170002_recovery.sql",
       "202609170003_avatar_scheme_guard.sql",
       "202609170004_profile_extras.sql",
+      "202609200001_hosting_gap_fill.sql",
+      "202609200002_fix_update_my_profile_pronouns.sql",
     ]);
   });
   it("enables RLS on every application table in the chain", () => {
