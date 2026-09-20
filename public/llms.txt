@@ -1,0 +1,20 @@
+# OFF — Open Freedom Forum
+
+> OFF is a real-time, pseudonymous community platform for technical conversations.
+> It collects less, is open about its limits, and hosts open communities plus
+> country and interest rooms.
+
+## Key facts
+
+- Pseudonym-first: no real-name requirement. Optional personal details are stored
+  separately from the public profile and gated by per-field visibility.
+- No ads, no surveillance stack, no session replay, no behavioral analytics.
+- Privacy features are described precisely — never marketed as anonymity guarantees.
+- Built with React on Supabase, deployed as a static bundle on Cloudflare Workers.
+
+## Product pages
+
+- [Home](https://off.testingver.workers.dev/): entry point and sign-in.
+- [Sign in](https://off.testingver.workers.dev/auth): create an account or sign in.
+
+_PROFILE_: member profiles live under `https://off.testingver.workers.dev/u/{username}`.

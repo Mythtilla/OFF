@@ -1,11 +1,25 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createRoot } from "react-dom/client";
-import { AuthForm } from "./components/auth/AuthForm";
-import { ChatShell } from "./components/chat/ChatShell";
-import { OnboardingFlow } from "./components/onboarding/OnboardingFlow";
 import { isSupabaseConfigured, supabase } from "./integrations/supabase/client";
+import { useRoute, navigate } from "./router";
+import { useHead } from "./lib/head";
+import { Link } from "./lib/Link";
+import { NotFound } from "./components/NotFound";
 import "./styles.css";
+
+const AuthForm = lazy(() =>
+  import("./components/auth/AuthForm").then((m) => ({ default: m.AuthForm })),
+);
+const ChatShell = lazy(() =>
+  import("./components/chat/ChatShell").then((m) => ({ default: m.ChatShell })),
+);
+const OnboardingFlow = lazy(() =>
+  import("./components/onboarding/OnboardingFlow").then((m) => ({ default: m.OnboardingFlow })),
+);
+const ProfileView = lazy(() =>
+  import("./components/profile/ProfileView").then((m) => ({ default: m.ProfileView })),
+);
 
 type ProfileRow = {
   username: string;
@@ -19,11 +33,15 @@ type ProfileRow = {
 type AppState =
   | { phase: "initializing" }
   | { phase: "error"; message: string }
-  | { phase: "signed-out"; screen: "landing" | "auth" }
+  | { phase: "signed-out" }
   | { phase: "onboarding"; session: Session; profile: ProfileRow }
   | { phase: "chat"; session: Session };
 
 function Landing({ onAuth }: { onAuth: () => void }) {
+  useHead({
+    title: "OFF — Open Freedom Forum",
+    path: "/",
+  });
   return (
     <main className="landing">
       <header>
@@ -32,7 +50,7 @@ function Landing({ onAuth }: { onAuth: () => void }) {
         <button onClick={onAuth}>Sign in</button>
       </header>
       <section className="hero">
-        <p className="eyebrow">PRIVATE CONVERSATIONS · OPEN COMMUNITIES</p>
+        <p className="eyebrow">PSEUDONYM-FIRST · OPEN COMMUNITIES</p>
         <h1>
           Talk freely.
           <br />
@@ -72,6 +90,7 @@ function Landing({ onAuth }: { onAuth: () => void }) {
 
 function Root() {
   const [state, setState] = useState<AppState>({ phase: "initializing" });
+  const route = useRoute();
 
   async function loadProfile(session: Session) {
     if (!supabase) return;
@@ -103,15 +122,25 @@ function Root() {
       .getSession()
       .then(({ data }) => {
         if (data.session) loadProfile(data.session);
-        else setState({ phase: "signed-out", screen: "landing" });
+        else setState({ phase: "signed-out" });
       })
-      .catch(() => setState({ phase: "signed-out", screen: "landing" }));
+      .catch(() => setState({ phase: "signed-out" }));
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) loadProfile(session);
-      else setState({ phase: "signed-out", screen: "landing" });
+      else setState({ phase: "signed-out" });
     });
     return () => data.subscription.unsubscribe();
   }, []);
+
+  const signedInPhase = state.phase === "chat" || state.phase === "onboarding";
+
+  useEffect(() => {
+    if (state.phase === "signed-out" && route.name === "onboarding") {
+      navigate("/", { replace: true });
+    } else if (signedInPhase && (route.name === "auth" || route.name === "onboarding")) {
+      navigate("/", { replace: true });
+    }
+  }, [state.phase, route.name, signedInPhase]);
 
   if (!isSupabaseConfigured) {
     return (
@@ -125,6 +154,17 @@ function Root() {
         </p>
       </main>
     );
+  }
+
+  if (route.name === "profile") {
+    return (
+      <Suspense fallback={null}>
+        <ProfileView username={route.username} />
+      </Suspense>
+    );
+  }
+  if (route.name === "notfound") {
+    return <NotFound path={route.path} />;
   }
 
   switch (state.phase) {
@@ -141,28 +181,42 @@ function Root() {
           <b>OFF</b>
           <h1>Something went wrong.</h1>
           <p>{state.message}</p>
+          <p>
+            <Link to="/">Back to OFF</Link>
+          </p>
         </main>
       );
     case "signed-out":
-      return state.screen === "landing" ? (
+      if (route.name === "auth") {
+        return (
+          <Suspense fallback={null}>
+            <AuthForm
+              onClose={() => navigate("/")}
+            />
+          </Suspense>
+        );
+      }
+      return (
         <Landing
-          onAuth={() => setState({ phase: "signed-out", screen: "auth" })}
-        />
-      ) : (
-        <AuthForm
-          onClose={() => setState({ phase: "signed-out", screen: "landing" })}
+          onAuth={() => navigate("/auth")}
         />
       );
     case "onboarding":
       return (
-        <OnboardingFlow
-          session={state.session}
-          profile={state.profile}
-          onComplete={() => loadProfile(state.session)}
-        />
+        <Suspense fallback={null}>
+          <OnboardingFlow
+            session={state.session}
+            profile={state.profile}
+            onComplete={() => loadProfile(state.session)}
+          />
+        </Suspense>
       );
     case "chat":
-      return <ChatShell session={state.session} />;
+      return (
+        <Suspense fallback={null}>
+          <ChatShell session={state.session} />
+        </Suspense>
+      );
   }
 }
 

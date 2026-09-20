@@ -8,7 +8,7 @@ Identity & auth
 - Username + password account (keep). Remove Google OAuth.
 - Exact-statement copy: "OFF stores a pseudonym and a derived internal auth email; no phone, no real email, no real name."
 - Autofill-friendly form (username, password), strength meter, username availability check.
-- Honest recovery placeholder retained and clearly labeled. Real recovery = future.
+- Honest recovery shipped: 24-word phrase (client-side/audited) → one-way bcrypt verifier → `recover_account` resets password and revokes sessions. Not a key backup (see `docs/E2EE-DESIGN.md`).
 
 Onboarding (reset to minimal)
 - Flow: create identity → privacy options (defaults) → enter World.

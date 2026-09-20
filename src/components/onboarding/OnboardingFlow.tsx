@@ -92,9 +92,10 @@ export function OnboardingFlow({
         <RecoveryCeremony
           username={profile.username}
           error={error}
-          onContinue={async () => {
+          onContinue={async (phrase) => {
             const { error: rpcError } = await supabase!.rpc(
-              "acknowledge_recovery",
+              "set_recovery_verifier",
+              { p_phrase: phrase.join(" ") },
             );
             if (rpcError) {
               setError("Something went wrong. Please try again.");

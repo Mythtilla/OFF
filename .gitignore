@@ -8,3 +8,4 @@ dist/
 .wrangler/
 supabase/.temp/
 *.log
+*.zip

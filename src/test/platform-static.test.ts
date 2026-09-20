@@ -85,7 +85,7 @@ describe("site metadata", () => {
   it("declares Open Graph identity", () => {
     expect(indexHtml).toContain('<meta property="og:title" content="OFF — Open Freedom Forum" />');
     expect(indexHtml).toContain(
-      '<meta property="og:description" content="Private conversations. Open communities. A community platform for people who build, explore and discuss technology." />',
+      '<meta property="og:description" content="Pseudonymous communities. Open conversations. A community platform for people who build, explore and discuss technology." />',
     );
     expect(indexHtml).toContain('<meta property="og:type" content="website" />');
   });
@@ -109,10 +109,12 @@ describe("site metadata", () => {
     expect(indexHtml).toContain("viewport-fit=cover");
     expect(indexHtml).toContain('name="theme-color" content="#0c0d0c"');
   });
-  it("robots.txt permits crawling without sitemap claims", () => {
+  it("robots.txt permits crawling and blocks non-indexable surface", () => {
     expect(robots).toContain("User-agent: *");
     expect(robots).toContain("Allow: /");
-    expect(robots).not.toContain("Disallow: /");
+    expect(robots).toContain("Disallow: /auth");
+    expect(robots).toContain("Disallow: /u/");
+    expect(robots).toContain("Sitemap: https://off.testingver.workers.dev/sitemap.xml");
   });
   it("assets exist without generated junk", () => {
     for (const f of ["favicon.svg", "og-image.png", "apple-touch-icon.png", "robots.txt", "_headers"])

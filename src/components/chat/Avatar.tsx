@@ -1,3 +1,12 @@
+function safeAvatarUrl(url?: string | null) {
+  if (!url) return null;
+  // Render-side mirror of the profiles_avatar_url_scheme CHECK (migration 003):
+  // only http(s) URLs or inline images are ever handed to <img>.
+  if (/^https:\/\//i.test(url)) return url;
+  if (/^data:image\//i.test(url)) return url;
+  return null;
+}
+
 export function Avatar({
   name,
   url,
@@ -7,11 +16,12 @@ export function Avatar({
   url?: string | null;
   large?: boolean;
 }) {
-  if (url) {
+  const src = safeAvatarUrl(url);
+  if (src) {
     return (
       <img
         className={large ? "avatar large" : "avatar"}
-        src={url}
+        src={src}
         alt=""
         aria-hidden="true"
       />

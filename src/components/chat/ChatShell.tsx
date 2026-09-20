@@ -9,6 +9,7 @@ import {
   reconcileUpdate,
   shortTime,
   validateMessageBody,
+  MAX_MESSAGE_LENGTH,
   type PendingMessage,
 } from "../../services/chat/messages";
 import type { Profile, Room } from "../../services/chat/types";
@@ -27,6 +28,8 @@ import { groupPreviews } from "../../services/chat/previews";
 import { Avatar } from "./Avatar";
 import { ProfileSettings } from "./ProfileSettings";
 import ChatList from "./ChatList";
+import { Link } from "../../lib/Link";
+import { probeMessagingFeatures } from "../../services/chat/features";
 
 function Sheet({
   open,
@@ -51,6 +54,7 @@ function Sheet({
       <aside
         className={open ? "sheet open" : "sheet"}
         aria-hidden={!open}
+        inert={!open}
         aria-label={title}
       >
         <header className="sheet-head">
@@ -72,6 +76,7 @@ export function ChatShell({ session }: { session: Session }) {
     [previews, setPreviews] = useState<Preview[]>([]),
     [senders, setSenders] = useState<Record<string, Profile>>({}),
     [selfProfile, setSelfProfile] = useState<Profile | null>(null),
+    [features, setFeatures] = useState({ dmRequests: true, resolveSenderNames: true }),
     [draft, setDraft] = useState(""),
     [replyTarget, setReplyTarget] = useState<PendingMessage | null>(null),
     [editingMsg, setEditingMsg] = useState<PendingMessage | null>(null),
@@ -99,12 +104,27 @@ export function ChatShell({ session }: { session: Session }) {
     if (!client) return;
     const missing = missingSenderIds(ids, sendersRef.current);
     if (!missing.length) return;
+    const fallbackRead = () =>
+      client
+        .from("profiles")
+        .select("id,username,display_name,avatar_url")
+        .in("id", missing)
+        .then(({ data: rows, error: readError }) => {
+          if (readError || !rows?.length) return;
+          setSenders((previous) => mergeSenderBatch(previous, rows));
+        });
+    if (features?.resolveSenderNames === false) {
+      // Stale hosted backend: resolve_sender_names is PGRST202, skip the RPC.
+      void fallbackRead();
+      return;
+    }
     client
-      .from("profiles")
-      .select("id,username,display_name,avatar_url")
-      .in("id", missing)
+      .rpc("resolve_sender_names", { p_ids: missing })
       .then(({ data, error }) => {
-        if (error || !data?.length) return;
+        if (error || !Array.isArray(data) || !data.length) {
+          // Fall back to the RLS-narrowed profile read (self + discoverable).
+          return fallbackRead();
+        }
         setSenders((previous) => mergeSenderBatch(previous, data));
       });
   }
@@ -122,6 +142,7 @@ export function ChatShell({ session }: { session: Session }) {
         setSelfProfile(data);
         setSenders((previous) => mergeSenderBatch(previous, [data]));
       });
+    probeMessagingFeatures().then(setFeatures);
     client
       .from("rooms")
       .select("id,slug,name,topic,kind,is_private")
@@ -445,7 +466,7 @@ export function ChatShell({ session }: { session: Session }) {
           url={selfProfile?.avatar_url}
         />
         <div>
-          <b>{selfProfile?.display_name || "Member"}</b>
+          <b>{selfProfile?.display_name || selfProfile?.username || "Account"}</b>
           <span>@{selfProfile?.username ?? session.user.user_metadata.username ?? "?"}</span>
         </div>
         <button
@@ -455,6 +476,11 @@ export function ChatShell({ session }: { session: Session }) {
         >
           {profileOpen ? "✕" : "✎"}
         </button>
+        {selfProfile?.username && (
+          <Link to={`/u/${selfProfile.username}`} className="identity-profile-link">
+            View profile
+          </Link>
+        )}
         <button onClick={() => supabase?.auth.signOut()}>Sign out</button>
       </div>
       {profileOpen && selfProfile && (
@@ -573,6 +599,11 @@ export function ChatShell({ session }: { session: Session }) {
                   senders,
                   item.message.profile,
                 )}
+                senderUsername={
+                  item.message.sender_id !== session.user.id
+                    ? (senders[item.message.sender_id]?.username ?? item.message.profile?.username ?? null)
+                    : null
+                }
                 avatarUrl={senders[item.message.sender_id]?.avatar_url}
                 actionFor={actionFor}
                 onToggleAction={(id) =>
@@ -625,13 +656,27 @@ export function ChatShell({ session }: { session: Session }) {
             <label className="sr-only" htmlFor="message">
               Message
             </label>
-            <input
+            <textarea
               id="message"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
               placeholder={active ? "Write a message…" : "Choose a room"}
+              maxLength={MAX_MESSAGE_LENGTH}
               disabled={sendDisabled}
             />
+            <span className="composer-count">
+              {draft.length}/{MAX_MESSAGE_LENGTH}
+            </span>
             <button aria-label="Send message" disabled={sendDisabled}>
               {editingMsg ? "✓" : "↑"}
             </button>
@@ -733,8 +778,8 @@ export function ChatShell({ session }: { session: Session }) {
             url={selfProfile?.avatar_url}
             large
           />
-          <b>{selfProfile?.display_name || "Member"}</b>
-          <span>@{selfProfile?.username ?? session.user.user_metadata.username ?? "—"}</span>
+          <b>{selfProfile?.display_name || selfProfile?.username || "Account"}</b>
+          <span>@{selfProfile?.username ?? session.user.user_metadata.username ?? ""}</span>
           {selfProfile && (
             <ProfileSettings
               session={session}
@@ -760,6 +805,7 @@ function MessageBubble({
   replyBody,
   own,
   senderName,
+  senderUsername,
   avatarUrl,
   actionFor,
   onToggleAction,
@@ -773,6 +819,7 @@ function MessageBubble({
   replyBody?: string | null;
   own: boolean;
   senderName: string;
+  senderUsername?: string | null;
   avatarUrl?: string | null;
   actionFor: string | null;
   onToggleAction: (id: string) => void;
@@ -781,8 +828,8 @@ function MessageBubble({
   onDelete: () => void;
   onCopy: () => void;
 }) {
-  const deleted = Boolean(message.deleted_at);
   const menuOpen = actionFor === message.id;
+  const deleted = Boolean(message.deleted_at);
   return (
     <div className={`bubble-row ${own ? "own" : "other"}`}>
       {!own && first && (
@@ -795,7 +842,15 @@ function MessageBubble({
           </div>
         )}
         {first && !own && (
-          <div className="bubble-sender">{own ? "You" : senderName}</div>
+          <div className="bubble-sender">
+            {senderUsername ? (
+              <Link to={`/u/${senderUsername}`} className="bubble-sender-link">
+                {senderName}
+              </Link>
+            ) : (
+              senderName
+            )}
+          </div>
         )}
         {deleted ? (
           <p className="bubble-deleted">This message was deleted</p>

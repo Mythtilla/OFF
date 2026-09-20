@@ -41,7 +41,7 @@ OFF does **not** collect: phone, real name, date of birth, location, email addre
   - real multi-device usable sign-in,
   - server-side RLS-enforced writing,
   - a recoverable community where nobody hand-manages keys.
-- Losing your password currently loses the account (recall/recovery is a placeholder). This limitation is disclosed.
+- Losing your password currently loses the account unless you backed up your 24-word recovery phrase during onboarding (a storage-owner can use it to reset the password — it is password recovery, not a cryptographic key backup). This limitation is disclosed.
 
 ## Verification of identity (V1.1+)
 

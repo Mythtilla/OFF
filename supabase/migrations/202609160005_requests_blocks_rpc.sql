@@ -30,7 +30,9 @@ returns boolean language sql stable security definer set search_path = public as
   )
 $$;
 
--- Send a message request. One pending request per pair (unique constraint).
+-- Send a message request. One request row per pair (unique constraint);
+-- re-sending is idempotent and reopens a previously rejected/cancelled
+-- request (an accepted request is left untouched — its thread already exists).
 -- Refuses: self-messaging, blocked either direction, non-contactable stranger.
 create or replace function public.send_dm_request(target_user uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
@@ -64,7 +66,9 @@ begin
   insert into public.dm_requests (sender_id, recipient_id)
   values (auth.uid(), target_user)
   on conflict (sender_id, recipient_id)
-  do update set sender_id = excluded.sender_id
+  do update set status = 'pending',
+                created_at = now()
+  where dm_requests.status <> 'accepted'
   returning id into result;
   return result;
 end $$;

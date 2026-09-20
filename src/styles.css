@@ -8,7 +8,7 @@
   --border2: #3b3e34;
   --text: #ece9e1;
   --text2: #a6a296;
-  --text3: #77746b;
+  --text3: #8b887f;
   --accent: #d8b780;
   --accent-ink: #1a1812;
   --danger: #d8726b;
@@ -44,6 +44,7 @@ button:disabled {
 }
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -249,7 +250,7 @@ img.avatar {
   color: var(--text2);
 }
 .auth input,
-.composer input {
+.composer textarea {
   display: block;
   width: 100%;
   margin-top: 8px;
@@ -260,7 +261,7 @@ img.avatar {
   padding: 12px 13px;
 }
 .auth input:focus-visible,
-.composer input:focus-visible {
+.composer textarea:focus-visible {
   border-color: var(--accent);
 }
 .auth .primary {
@@ -1025,10 +1026,18 @@ img.avatar {
   gap: 8px;
   align-items: stretch;
 }
-.composer input {
+.composer textarea {
   flex: 1;
   min-width: 0;
   margin: 0;
+  resize: none;
+  line-height: 1.4;
+}
+.composer-count {
+  align-self: flex-end;
+  font: 10px var(--font-mono);
+  color: var(--text3);
+  margin: 0 2px 2px 0;
 }
 .composer button {
   width: 48px;
@@ -1144,6 +1153,374 @@ img.avatar {
   }
 }
 
+/* ---------- profile settings (edit mode) ---------- */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.settings-section h3 {
+  margin: 14px 0 2px;
+  font: 11px var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--text3);
+  text-transform: uppercase;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: 11px var(--font-mono);
+  color: var(--text2);
+}
+.settings-field > small {
+  color: var(--text3);
+  line-height: 1.4;
+}
+.settings-field input,
+.settings-field textarea,
+.settings-select select {
+  width: 100%;
+  margin-top: 2px;
+  background: var(--input);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font: 14px var(--font-sans);
+}
+.settings-field textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+}
+.settings-field input.invalid,
+.settings-field textarea.invalid {
+  border-color: var(--danger);
+}
+.settings-field input:focus-visible,
+.settings-field textarea:focus-visible,
+.settings-select select:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.settings-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: 11px var(--font-mono);
+  color: var(--text2);
+}
+.settings-select select {
+  font: 14px var(--font-sans);
+}
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-toggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: 13px var(--font-sans);
+  color: var(--text);
+}
+.settings-toggle small {
+  color: var(--text3);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+}
+.settings-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+  flex: none;
+}
+.hint {
+  display: block;
+  font-size: 11px;
+  color: var(--text3);
+}
+.hint.good {
+  color: var(--ok);
+}
+.hint.bad {
+  color: var(--danger);
+}
+.settings-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.settings-head .avatar {
+  width: 56px;
+  height: 56px;
+  font-size: 22px;
+}
+.settings-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-avatar-actions button {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: 12px var(--font-mono);
+  padding: 6px 2px;
+  text-align: left;
+}
+.settings-footer {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.settings-footer .status {
+  flex: 1 1 100%;
+  margin: 0;
+}
+.link-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.link-row .settings-select {
+  grid-column: 1 / -1;
+}
+.link-row .edge {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+.song-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.song-row .edge {
+  align-self: flex-start;
+}
+.profile-settings .primary {
+  border: 0;
+  border-radius: var(--radius);
+  padding: 12px 18px;
+}
+
+/* ---------- mention editor ---------- */
+.mention-editor {
+  position: relative;
+}
+.mention-autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.mention-autocomplete li + li {
+  border-top: 1px solid var(--border);
+}
+.mention-autocomplete button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 8px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.mention-autocomplete button.active,
+.mention-autocomplete button:hover {
+  background: var(--surface2);
+}
+.mention-autocomplete button b {
+  font-weight: 600;
+}
+.mention-autocomplete button small {
+  color: var(--text3);
+  font-family: var(--font-mono);
+}
+.mention-text .mention {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---------- profile view & preview ---------- */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+.profile-view {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+.profile-nav {
+  margin-bottom: 22px;
+}
+.profile-nav .back {
+  color: var(--text2);
+  text-decoration: none;
+  font: 13px var(--font-mono);
+}
+.profile-nav .back:hover {
+  color: var(--accent);
+}
+.profile-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.profile-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.profile-header .avatar {
+  width: 72px;
+  height: 72px;
+  font-size: 28px;
+}
+.view-name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.view-handle {
+  margin: 2px 0 0;
+  font: 13px var(--font-mono);
+  color: var(--text3);
+}
+.view-pronouns,
+.view-meta,
+.view-status {
+  margin: 2px 0 0;
+}
+.view-bio {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+.view-song,
+.view-meta {
+  margin: 0;
+}
+.view-interests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.view-interests li {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font: 12px var(--font-mono);
+  color: var(--text2);
+}
+.view-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.view-links a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.view-actions,
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.profile-actions .note {
+  margin: 0;
+}
+.profile-preview {
+  border: 1px dashed var(--border2);
+  border-radius: 8px;
+  padding: 14px;
+}
+.preview-heading {
+  margin: 0 0 10px;
+}
+.preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.preview-header .view-name {
+  font-size: 18px;
+}
+.preview-private {
+  margin: 0;
+}
+
+/* ---------- identity/profile link ---------- */
+.identity-profile-link {
+  color: var(--text3);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 10px 6px;
+}
+.identity-profile-link:hover {
+  color: var(--accent);
+}
+.bubble-sender-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.bubble-sender-link:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 1199px) {
   .details-close {
     display: grid;
@@ -1195,7 +1572,7 @@ img.avatar {
   .composer {
     padding: 10px 12px calc(8px + env(safe-area-inset-bottom, 0px));
   }
-  .composer input {
+  .composer textarea {
     font-size: 16px;
     min-height: 48px;
   }

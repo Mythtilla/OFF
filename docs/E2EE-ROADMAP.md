@@ -15,7 +15,7 @@ Honest layering: OFF currently has transport encryption only. Nothing in this do
 ## What must change before OFF can honestly claim E2EE
 
 1. **Key management per user.** Each account needs a persistent keypair (or session pair) whose private key never leaves the client.
-   - Consequence: a new device cannot decrypt history → key backup/recovery must be designed BEFORE rollout, and OFF must decide whether recovering keys is possible (supersedes the current placeholder recovery ceremony).
+   - Consequence: a new device cannot decrypt history → key backup/recovery must be designed BEFORE rollout, and OFF must decide whether recovering keys is possible (this supersedes the real-but-non-key recovery ceremony). See `docs/E2EE-DESIGN.md` for the current recovery-and-E2EE decision.
 2. **Message model change.** `messages` body column must store ciphertext + a recipients/keyset reference; the DB loses the ability to serve plaintext.
    - Realtime must push ciphertext, not plaintext rows.
    - Indexes/filtering on plaintext (search) become impossible or require a separate privacy trade.
@@ -45,4 +45,4 @@ Honest layering: OFF currently has transport encryption only. Nothing in this do
 
 - No homemade cryptographic primitives.
 - No claiming E2EE based on TLS or on "the DB is private because RLS."
-- Before any E2EE merge, the key-recovery answer must be written down; else users lose accounts and OFF ships a worse failure than today.
+- Before any E2EE merge, the key-recovery answer must be written down; else users lose accounts and OFF ships a worse failure than today. `docs/E2EE-DESIGN.md` is the current written answer.

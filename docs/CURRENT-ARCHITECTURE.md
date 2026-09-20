@@ -1,6 +1,6 @@
 # OFF — CURRENT-ARCHITECTURE.md
 
-Status: verified against source on 2026-09-12. This map supersedes prior informal descriptions.
+Status: verified against source on 2026-09-18. This map supersedes prior informal descriptions.
 
 ## Stack
 
@@ -10,15 +10,15 @@ Status: verified against source on 2026-09-12. This map supersedes prior informa
 | Hosting | Cloudflare Workers — Static Assets (SPA fallback) | `wrangler.jsonc` |
 | Backend-as-a-service | Supabase (Postgres + Auth + Realtime) | hosted project `afkxawjhaoobdnegaekp.supabase.co` (V1; CLI linked; deployed bundle embeds it). Legacy project `yiwygvsqrcouqsjjtgiq` archived 2026-09-13 |
 | Client server access | Supabase anon/publishable key only (no service-role anywhere) | `src/integrations/supabase/client.ts` |
-| Database versioning | 16 applied migration files | `supabase/migrations/` |
+| Database versioning | 25 sequential migration files (full chain, source of truth) | `supabase/migrations/` |
 | Local CLI | Supabase CLI config present (`config.toml`, project `OFF`, local port 54321) | `supabase/config.toml` |
 
 ## Runtime entry points
 
 - `src/main.tsx` — top-level state machine: `initializing → error | signed-out (landing/auth) | onboarding | chat`.
   - If Supabase env vars are unset → dedicated "Configuration required." screen (`isSupabaseConfigured`).
-- `src/components/auth/AuthForm.tsx` — sign in / create-account, username + password only (Google OAuth removed in the privacy pivot).
-- `src/components/onboarding/OnboardingFlow.tsx` — 4-step onboarding: recovery → profile → country → interests.
+- `src/components/auth/AuthForm.tsx` — sign in / create-account / **recovery** (24-word phrase → password reset), username + password only (Google OAuth removed in the privacy pivot).
+- `src/components/onboarding/OnboardingFlow.tsx` — 2-step onboarding: recovery phrase → profile.
 - `src/components/chat/ChatShell.tsx` — main app shell: left nav (Home/Rooms/You), conversation + details rail, bottom nav + sheets on mobile.
 
 ## Services (pure logic, unit-tested)
@@ -28,7 +28,7 @@ Status: verified against source on 2026-09-12. This map supersedes prior informa
 | `auth/service.ts` | `signIn`, `signUp` (uses `usernameToAuthEmail`) |
 | `auth/username.ts` | canonicalize/validate username, derive deterministic auth email (`<username>@off.app`) |
 | `auth/availability.ts` | `checkUsername` → idle/checking/available/unavailable/invalid via RPC `username_status` |
-| `auth/strength.ts`, `auth/errors.ts`, `auth/recovery.ts` | password strength, safe error mapping, recovery notice copy |
+| `auth/strength.ts`, `auth/errors.ts`, `auth/recovery.ts` | password strength, safe error mapping, recovery phrase generation/validation + notice copy |
 | `chat/types.ts`, `chat/messages.ts`, `chat/senders.ts`, `chat/status.ts` | message shape, reconcile/group, sender name resolution, channel status labels |
 | `navigation/layout.ts` | viewport breakpoints (320/767/1199), section grouping (world/country/interest/custom) |
 | `onboarding/state.ts`, `progress.ts`, `interests.ts` | step routing, progress %, interest slugs + legality |
@@ -39,9 +39,9 @@ Status: verified against source on 2026-09-12. This map supersedes prior informa
 ## Database schema (from migrations)
 
 - Types: `room_kind` enum (`world` | `country` | `interest` | `custom`).
-- Tables: `profiles`, `rooms`, `room_members`, `messages`, `dm_threads`, `user_interests`.
+- Tables: `profiles`, `rooms`, `room_members`, `messages`, `dm_threads`, `user_interests`, `dm_requests`, `blocks`, `rate_counters`, `recovery_verifiers`.
 - Seeded rooms (migration 001): `world`, `cybersecurity`, `linux`, `programming`, `ai`, `ctf`, `science`, `hardware`.
-- RPC functions: `handle_new_user`, `is_room_member`, `is_room_moderator`, `is_room_owner`, `require_authenticated`, `create_room`, `join_public_room`, `leave_room`, `get_or_create_dm_thread`, `can_access_thread`, `complete_onboarding`, `complete_profile`, `handle_country`, `set_onboarding_interests`, `acknowledge_recovery`, `username_status`, `validate_message_reply`, `protect_room_owner`, `guard_onboarding_state`, `guard_profile_identity`, `guard_message_immutable_fields`, `guard_profile_trusted_fields`.
+- RPC functions: `handle_new_user`, `is_room_member`, `is_room_moderator`, `is_room_owner`, `require_authenticated`, `create_room`, `join_public_room`, `leave_room`, `get_or_create_dm_thread`, `can_access_thread`, `complete_onboarding`, `complete_profile`, `handle_country`, `set_onboarding_interests`, `acknowledge_recovery`, `username_status`, `validate_message_reply`, `protect_room_owner`, `guard_onboarding_state`, `guard_profile_identity`, `guard_message_immutable_fields`, `guard_profile_trusted_fields`, `resolve_sender_names`, `send_dm_request`, `accept_dm_request`, `reject_dm_request`, `block_user`, `unblock_user`, `is_blocked`, `rate_limited`, `set_recovery_verifier`, `recover_account`, `recovery_hash`, `recovery_matches`, `recovery_phrase_valid`.
 - Triggers: profile auto-create, reply validation, owner protection, onboarding-state guard, identity guard, message-immutability guard, profile-trusted-fields guard.
 - RLS is authoritative from `202609060005_authoritative_rls.sql` onward; later migrations only refine/guard.
 
@@ -62,9 +62,9 @@ Status: verified against source on 2026-09-12. This map supersedes prior informa
 
 ## Data flows
 
-- Onboarding → `complete_profile`/`handle_country`/`set_onboarding_interests` RPCs write the `profiles` row and add room memberships (incl. World and interest/country rooms).
+- Onboarding → `complete_profile` (two-step ceremony) writes the `profiles` row and grants World membership; **recovery** binds a one-way bcrypt verifier via `set_recovery_verifier`.
 - Chat → messages inserted optimistically with a client event id; Supabase Realtime broadcasts on `messages`; `reconcileMessage` replaces pending rows; groups by sender/room.
-- DMs → `get_or_create_dm_thread` RPC returns a thread id; messages addressed to that thread only.
+- DMs → `send_dm_request` → `accept_dm_request` creates the canonical thread; messages addressed to that thread only; `block_user` revokes the blocked party's thread access server-side.
 
 ## Testing
 
@@ -80,7 +80,8 @@ Status: verified against source on 2026-09-12. This map supersedes prior informa
 
 1. Identity is a username → deterministic pseudo-email; no invitation/connection model; usernames are not minimal information.
 2. Every room kind and seeded interest/country rooms exist; the product aims for a single World + private conversations.
-3. Onboarding collects country + interests before entering the product — target: create identity → privacy options → World (V1 redesign; code still 4-step today).
-4. No message requests, blocking, disappearing messages, privacy settings, or account deletion flow (UI).
-6. No E2EE; content is TLS + server-side plaintext in Supabase (honest claim: transport encryption only).
-7. Recovery ceremony is a labeled placeholder, not a real backup.
+3. Onboarding is now 2-step (recovery → profile); country/interests bookkeeping is auto-handled server-side but no longer surfaced.
+4. Request/block RPCs and privacy flags are shipped; the **UI** for the requests inbox, blocking, and privacy toggles is still pending (ProfileSettings shell exists).
+5. No disappearing messages, moderation, or account deletion RPC (documented future).
+6. No E2EE; content is TLS + server-side plaintext in Supabase (honest claim: transport encryption only). See `docs/E2EE-DESIGN.md`.
+7. Recovery is real (password reset via one-way phrase verifier) but is **not** a key backup for E2EE content.

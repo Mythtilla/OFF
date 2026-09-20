@@ -90,7 +90,7 @@ describe("responsive architecture in CSS", () => {
     expect(mobile).toContain("font-size: 16px");
   });
   it("mobile composer and touch targets meet 44px guidance", () => {
-    expect(css).toMatch(/\.composer (input|button) \{[^}]*min-height: 48px/s);
+    expect(css).toMatch(/\.composer (textarea|button) \{[^}]*min-height: 48px/s);
     expect(css).toMatch(/\.bottom-nav button \{[^}]*min-height: 52px/s);
     expect(css).toMatch(/\.sheet-head button \{[^}]*min-width: 44px/s);
   });
@@ -106,7 +106,7 @@ describe("responsive architecture in CSS", () => {
     expect(css).toContain("transition-duration: 0.01ms !important");
   });
   it("focus is visible on all interactive controls", () => {
-    expect(css).toContain("button:focus-visible,\ninput:focus-visible,\na:focus-visible");
+    expect(css).toContain("button:focus-visible,\ninput:focus-visible,\ntextarea:focus-visible,\na:focus-visible");
   });
 });
 

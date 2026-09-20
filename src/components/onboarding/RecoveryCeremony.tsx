@@ -12,7 +12,7 @@ export function RecoveryCeremony({
   error,
 }: {
   username: string;
-  onContinue: () => void;
+  onContinue: (phrase: string[]) => void;
   error?: string;
 }) {
   const phrase = useMemo(() => generateRecoveryPhrase(), []),
@@ -72,7 +72,7 @@ export function RecoveryCeremony({
           />{" "}
           I have securely stored my recovery phrase.
         </label>
-        <button className="primary" disabled={!confirmed} onClick={onContinue}>
+        <button className="primary" disabled={!confirmed} onClick={() => onContinue(phrase)}>
           Continue <span>→</span>
         </button>
         <p className="fine">{recoveryNotice}</p>

@@ -84,14 +84,20 @@ for (const needle of ['<div id="root">', 'rel="canonical"', 'property="og:image"
   else fail(`index.html missing ${needle}`);
 }
 
-const moduleMatch = html.match(/<script type="module"[^>]*src="([^"]+)"/);
-if (moduleMatch) {
-  const asset = await get(`${BASE}${moduleMatch[1]}`);
-  if (asset.status === 200 && (await asset.text()).includes("createRoot")) pass("module bundle serves and is the app entry");
-  else fail("module bundle missing or not the app entry");
-} else {
-  fail("no module script found in index.html");
+const modules = [...html.matchAll(/<script type="module"[^>]*src="([^"]+)"/g)].map((m) => m[1]);
+if (modules.length === 0) fail("no module scripts found in index.html");
+let entryOk = modules.length > 0;
+let createRootSeen = false;
+for (const src of modules) {
+  const res = await get(`${BASE}${src}`);
+  if (res.status !== 200) {
+    if (src === modules[0]) entryOk = false;
+  } else if ((await res.text()).includes("createRoot")) {
+    createRootSeen = true;
+  }
 }
+if (entryOk && createRootSeen) pass("app entry serves and bundles createRoot");
+else fail("module bundle missing, not the app entry, or react-dom split wrong");
 
 for (const asset of ["favicon.svg", "robots.txt", "_headers", "apple-touch-icon.png", "og-image.png"]) {
   const res = await get(`${BASE}/${asset}`);

@@ -97,7 +97,7 @@ describe("onboarding progress", () => {
   });
 });
 
-describe("recovery placeholder", () => {
+describe("recovery phrase", () => {
   it("generates 24 words", () => {
     expect(generateRecoveryPhrase()).toHaveLength(24);
   });
@@ -106,7 +106,8 @@ describe("recovery placeholder", () => {
       expect(word.length).toBeGreaterThan(0);
     }
   });
-  it("states plainly that it is not a cryptographic backup", () => {
-    expect(recoveryNotice).toContain("placeholder");
+  it("describes a real one-way recovery verifier, not a placeholder", () => {
+    expect(recoveryNotice).toContain("verifier");
+    expect(recoveryNotice).not.toContain("placeholder");
   });
 });

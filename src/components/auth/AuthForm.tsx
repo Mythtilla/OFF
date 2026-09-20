@@ -4,7 +4,8 @@ import {
   canonicalizeUsername,
   validateUsername,
 } from "../../services/auth/username";
-import { recoveryNotice } from "../../services/auth/recovery";
+import { recoveryNotice, recoveryPhraseValid } from "../../services/auth/recovery";
+import { supabase } from "../../integrations/supabase/client";
 import {
   checkUsername,
   type UsernameCheck,
@@ -25,10 +26,21 @@ function strengthTone(level: PasswordLevel | null) {
   return "ok";
 }
 
+function safeRecoveryError(message: string) {
+  if (message.includes("Too many recovery attempts"))
+    return "Too many recovery attempts. Try again later.";
+  if (message.includes("Recovery failed"))
+    return "The username, recovery phrase, or new password is incorrect.";
+  return safeAuthError(message);
+}
+
 export function AuthForm({ onClose }: { onClose: () => void }) {
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in"),
+    [recovery, setRecovery] = useState(false),
     [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
+    [recoveryPhrase, setRecoveryPhrase] = useState(""),
+    [newPassword, setNewPassword] = useState(""),
     [showPassword, setShowPassword] = useState(false),
     [status, setStatus] = useState(""),
     [submitting, setSubmitting] = useState(false),
@@ -89,6 +101,38 @@ export function AuthForm({ onClose }: { onClose: () => void }) {
 setSubmitting(false);
   }
 
+  async function submitRecovery(e: React.FormEvent) {
+    e.preventDefault();
+    const name = canonicalizeUsername(username);
+    const invalid = validateUsername(name);
+    if (invalid) return setStatus(invalid);
+    const cleanPhrase = recoveryPhrase.trim().replace(/\s+/g, " ");
+    if (!recoveryPhraseValid(cleanPhrase)) {
+      setStatus("Enter the 24-word recovery phrase from setup.");
+      return;
+    }
+    setSubmitting(true);
+    setStatus("Working…");
+    try {
+      const { error } = await supabase!.rpc("recover_account", {
+        p_username: name,
+        p_phrase: cleanPhrase,
+        p_new_password: newPassword,
+      });
+      if (error) {
+        setStatus(safeRecoveryError(error.message));
+      } else {
+        setRecovery(false);
+        setNewPassword("");
+        setRecoveryPhrase("");
+        setStatus("Password reset. Sign in with your new password.");
+      }
+    } catch {
+      setStatus("Network error. Please try again.");
+    }
+    setSubmitting(false);
+  }
+
   const hint =
     usernameCheck.status === "checking"
       ? { text: "Checking availability…", tone: "muted" }
@@ -114,12 +158,17 @@ setSubmitting(false);
             ? 3
             : 4;
 
+  function handleSubmit(e: React.FormEvent) {
+    if (recovery) void submitRecovery(e);
+    else void submit(e);
+  }
+
   return (
     <main className="auth">
       <button className="back" onClick={onClose}>
         ← Back
       </button>
-      <form onSubmit={submit}>
+      <form onSubmit={handleSubmit}>
         <b>OFF</b>
         <p className="eyebrow">
           {mode === "sign_in" ? "WELCOME BACK" : "CREATE A PSEUDONYM"}
@@ -165,30 +214,97 @@ setSubmitting(false);
               ))}
             </div>
           )}
-        <label>
-          Password
-          <span className="pass-row">
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type={showPassword ? "text" : "password"}
-              minLength={6}
-              autoComplete={
-                mode === "sign_in" ? "current-password" : "new-password"
-              }
-              required
-            />
-            <button
-              type="button"
-              className="toggle"
-              onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? "Hide" : "Show"}
-            </button>
-          </span>
-        </label>
-        {mode === "sign_up" && (
+        {recovery ? (
+          <>
+            <label>
+              Recovery phrase
+              <textarea
+                className="recovery-phrase"
+                value={recoveryPhrase}
+                onChange={(e) => setRecoveryPhrase(e.target.value)}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                rows={3}
+                maxLength={200}
+                required
+              />
+            </label>
+            <label>
+              New password
+              <span className="pass-row">
+                <input
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  type={showPassword ? "text" : "password"}
+                  minLength={6}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </span>
+            </label>
+            {mode === "sign_in" && (
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  setRecovery(false);
+                  setStatus("");
+                }}
+              >
+                Back to sign in
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <label>
+              Password
+              <span className="pass-row">
+                <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type={showPassword ? "text" : "password"}
+                  minLength={6}
+                  autoComplete={
+                    mode === "sign_in" ? "current-password" : "new-password"
+                  }
+                  required
+                />
+                <button
+                  type="button"
+                  className="toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </span>
+            </label>
+            {mode === "sign_in" && (
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  setRecovery(true);
+                  setStatus("");
+                }}
+              >
+                Forgot your recovery phrase?
+              </button>
+            )}
+          </>
+        )}
+        {mode === "sign_up" && !recovery && (
           <>
             <div
               className={`meter ${strength ?? "too-short"}`}
@@ -212,23 +328,27 @@ setSubmitting(false);
         <button className="primary" disabled={submitting}>
           {submitting
             ? "Working…"
-            : mode === "sign_in"
-              ? "Continue"
-              : "Create account"}{" "}
+            : recovery
+              ? "Reset password"
+              : mode === "sign_in"
+                ? "Continue"
+                : "Create account"}{" "}
           <span>→</span>
         </button>
-        <button
-          type="button"
-          className="link"
-          onClick={() => {
-            setMode(mode === "sign_in" ? "sign_up" : "sign_in");
-            setStatus("");
-          }}
-        >
-          {mode === "sign_in"
-            ? "New here? Create an account"
-            : "Already registered? Sign in"}
-        </button>
+        {!recovery && (
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              setMode(mode === "sign_in" ? "sign_up" : "sign_in");
+              setStatus("");
+            }}
+          >
+            {mode === "sign_in"
+              ? "New here? Create an account"
+              : "Already registered? Sign in"}
+          </button>
+        )}
         {status && (
           <p role="status" className="status">
             {status}
